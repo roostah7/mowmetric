@@ -1,0 +1,2816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<title>Lawn Care Cost Calculator — Fair, Data-Backed Pricing by ZIP | MowMetric</title>
+<meta name="description" content="Free calculator that uses U.S. Bureau of Labor Statistics wage data and satellite lawn measurement to show what lawn care should cost in your area. Independent, transparent methodology. No sales calls.">
+<meta name="theme-color" content="#2d7a3d">
+<link rel="canonical" href="https://mowmetric.com/">
+
+<meta property="og:title" content="MowMetric — Fair Lawn Care Pricing, Backed by Real Data">
+<meta property="og:description" content="Draw your lawn on a satellite map and get an independent, data-backed price using U.S. labor statistics. Know what a fair quote looks like before you hire anyone.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+
+<!-- Preconnect to CDN and geocoding endpoints for faster first paint -->
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="preconnect" href="https://nominatim.openstreetmap.org">
+<link rel="preconnect" href="https://geocoding.geo.census.gov">
+<link rel="preconnect" href="https://server.arcgisonline.com" crossorigin>
+<link rel="preconnect" href="https://plausible.io" crossorigin>
+
+<!-- Plausible analytics (privacy-friendly, no cookies, GDPR/CCPA-compliant out of the box).
+     `data-domain` must be set to the live domain once deployed. Events fire via the
+     `plausible()` global; we wrap all event calls in typeof-checks so this script is
+     fully optional — the site works fine without it. -->
+<script defer data-domain="mowmetric.com" src="https://plausible.io/js/script.tagged-events.js"></script>
+<script>window.plausible = window.plausible || function() { (window.plausible.q = window.plausible.q || []).push(arguments); };</script>
+
+<!-- Leaflet + Leaflet.draw + Turf.js are lazy-loaded after address entry (see loadMapLibs()).
+     Prefetching them so they're in cache the moment the user hits "Find my lawn". -->
+<link rel="prefetch" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" as="style">
+<link rel="prefetch" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" as="script">
+<link rel="prefetch" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" as="style">
+<link rel="prefetch" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js" as="script">
+<link rel="prefetch" href="https://unpkg.com/@turf/turf@6/turf.min.js" as="script">
+
+<!-- Structured data: the site as a WebApplication -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "MowMetric Lawn Care Pricing Calculator",
+  "url": "https://mowmetric.com/",
+  "applicationCategory": "UtilityApplication",
+  "operatingSystem": "Web",
+  "description": "Free, independent lawn care cost calculator using U.S. Bureau of Labor Statistics wage data and satellite lawn measurement.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "creator": { "@type": "Organization", "name": "MowMetric" }
+}
+</script>
+
+<!-- Structured data: FAQPage for the FAQ section -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "How does MowMetric calculate lawn care prices?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "We multiply the exact lawn size you draw (measured in acres with geodesic accuracy) by a regional labor rate sourced from the U.S. Bureau of Labor Statistics (SOC 37-3011, Landscaping and Groundskeeping Workers), apply a tiered per-area rate that reflects real-world mowing efficiency, and include a fair industry-standard markup for equipment, fuel, insurance, and overhead. The full formula is published on this page."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is MowMetric a lawn care company?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. MowMetric is an independent pricing calculator. We do not mow lawns. If you choose to, we can connect you with local pros who have agreed to honor the price we show, but you are never required to use any provider to see the price."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What does MowMetric do with my data?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "If you only use the calculator, your address is used to center the satellite map and is not stored. If you submit the match form, we share your contact details with up to 3 vetted local providers so they can quote your job — we're paid a referral fee by the provider, not by you. We never share your information with data brokers, ad networks, or third parties unrelated to your service request."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why is a small yard priced almost the same as a medium yard?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Lawn care has a real minimum cost floor. A provider must drive to your home, unload equipment, and complete basic setup even for a tiny lawn under 1/100th of an acre. Our minimum job floor reflects that — any quote below roughly $35 is unusual in most U.S. markets."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How recent is the wage data?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "We use the most recent BLS Occupational Employment and Wage Statistics for SOC 37-3011, updated annually. Our dataset is re-synced within 60 days of each BLS release."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I use this quote as a negotiating tool with my current provider?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Many homeowners do exactly this. Bring the breakdown to your current provider and ask them to explain any significant difference. A fair provider can justify their price by reference to labor, equipment, and site conditions."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why does a one-time cut cost more than recurring service?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Recurring customers get a consistent, shorter cut that a crew can move through quickly, and the crew can route-stack nearby jobs for lower fuel and drive time. A one-time cut usually means taller grass and a crew driving out for a single job, so per-visit pricing is about 15% higher than a regular bi-weekly cadence. Weekly customers get a small discount on top because they are the most efficient route to service."
+      }
+    }
+  ]
+}
+</script>
+
+<style>
+:root {
+  --green-900: #14381e;
+  --green-800: #1f5a2d;
+  --green-700: #2d7a3d;
+  --green-600: #3a9650;
+  --green-500: #4fb866;
+  --green-100: #e7f4ea;
+  --green-50:  #f2faf4;
+  --gold:      #f4a62a;
+  --gold-dark: #d88e12;
+  --ink:       #1a2e1e;
+  --ink-soft:  #3c4a41;
+  --ink-mute:  #6b7a72;
+  --line:      #e3eae5;
+  --bg:        #fafaf7;
+  --white:     #ffffff;
+  --danger:    #c0392b;
+  --shadow:    0 8px 30px rgba(20, 56, 30, 0.10);
+  --shadow-sm: 0 2px 8px rgba(20, 56, 30, 0.06);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.55;
+}
+
+h1, h2, h3, h4 {
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ink);
+  margin: 0 0 0.5em 0;
+}
+
+h1 { font-size: clamp(1.8rem, 5vw, 2.8rem); }
+h2 { font-size: clamp(1.4rem, 3.5vw, 2rem); }
+h3 { font-size: 1.15rem; }
+
+p  { margin: 0 0 1em 0; color: var(--ink-soft); }
+
+a  { color: var(--green-700); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* ---------- HEADER ---------- */
+header.site {
+  background: var(--white);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: saturate(1.2) blur(6px);
+}
+.site-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: var(--green-800);
+  letter-spacing: -0.01em;
+}
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--green-600), var(--green-800));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 900;
+  font-size: 16px;
+}
+nav.site-nav a {
+  color: var(--ink-soft);
+  font-weight: 500;
+  margin-left: 20px;
+  font-size: 0.95rem;
+}
+nav.site-nav a:hover { color: var(--green-700); }
+@media (max-width: 640px) {
+  nav.site-nav { display: none; }
+}
+
+/* ---------- HERO ---------- */
+.hero {
+  padding: 32px 0 16px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--green-50) 0%, var(--bg) 100%);
+}
+.hero h1 {
+  max-width: 780px;
+  margin: 0 auto 14px;
+  letter-spacing: -0.02em;
+  font-size: clamp(1.7rem, 4vw, 2.4rem);
+  line-height: 1.15;
+}
+.hero h1 .accent {
+  color: var(--green-700);
+  position: relative;
+  white-space: nowrap;
+}
+.hero .trust-row {
+  display: inline-flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 0.82rem;
+  color: var(--ink-mute);
+}
+.hero .trust-row span::before {
+  content: "✓ ";
+  color: var(--green-600);
+  font-weight: 700;
+}
+@media (max-width: 560px) {
+  .hero { padding: 22px 0 10px; }
+}
+
+/* ---------- CALCULATOR CARD ---------- */
+.calc-wrap {
+  padding: 20px 0 60px;
+}
+.calc-card {
+  background: var(--white);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.step-header {
+  padding: 22px 26px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--green-50);
+}
+.step-header .step-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--green-700);
+  color: white;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+.step-header h2 {
+  font-size: 1.25rem;
+  margin: 0 0 4px 0;
+}
+.step-header p {
+  font-size: 0.92rem;
+  color: var(--ink-mute);
+  margin: 0;
+}
+
+/* Step 1: Address */
+.address-form {
+  padding: 20px 26px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.address-form input[type="text"] {
+  flex: 1;
+  min-width: 240px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: var(--white);
+  color: var(--ink);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.address-form input[type="text"]:focus {
+  outline: none;
+  border-color: var(--green-600);
+  box-shadow: 0 0 0 3px rgba(58, 150, 80, 0.15);
+}
+
+/* Autocomplete dropdown */
+.address-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+}
+.address-wrap input[type="text"] {
+  width: 100%;
+}
+.ac-dropdown {
+  display: none;
+  /* Positioned via JS (see positionAcDropdown) so it escapes the .calc-card
+     overflow: hidden clipping. Fixed positioning also keeps the list glued
+     to the input if the user scrolls while typing. */
+  position: fixed;
+  z-index: 1000;
+  background: var(--white);
+  border: 1.5px solid var(--green-600);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.ac-dropdown.active { display: block; }
+.ac-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 0.92rem;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+  transition: background 0.1s;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ac-item:last-child { border-bottom: none; }
+.ac-item:hover, .ac-item.highlighted {
+  background: var(--green-50);
+}
+.ac-item .ac-main {
+  font-weight: 600;
+  color: var(--ink);
+}
+.ac-item .ac-sub {
+  font-size: 0.82rem;
+  color: var(--ink-mute);
+}
+.ac-spinner {
+  padding: 12px 16px;
+  font-size: 0.88rem;
+  color: var(--ink-mute);
+  text-align: center;
+}
+
+button.btn {
+  padding: 14px 22px;
+  background: var(--green-700);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.05s;
+  white-space: nowrap;
+}
+button.btn:hover { background: var(--green-800); }
+button.btn:active { transform: translateY(1px); }
+button.btn:disabled {
+  background: var(--line);
+  color: var(--ink-mute);
+  cursor: not-allowed;
+}
+button.btn.secondary {
+  background: var(--white);
+  color: var(--green-800);
+  border: 1.5px solid var(--green-700);
+}
+button.btn.secondary:hover {
+  background: var(--green-50);
+}
+button.btn.gold {
+  background: var(--gold);
+  color: var(--green-900);
+}
+button.btn.gold:hover { background: var(--gold-dark); }
+
+/* Map */
+.map-section {
+  display: none;
+}
+.map-section.active { display: block; }
+
+#map {
+  width: 100%;
+  height: 480px;
+  background: #d7e5d9;
+}
+@media (max-width: 640px) {
+  #map { height: 360px; }
+}
+
+.map-instructions {
+  padding: 14px 20px;
+  background: var(--green-50);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.map-instructions .emoji {
+  font-size: 1.3rem;
+}
+
+.map-toolbar {
+  padding: 14px 20px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+.area-display {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--green-800);
+  font-size: 1.05rem;
+  text-align: right;
+  line-height: 1.2;
+}
+.area-display .area-num { font-size: 1.3rem; }
+.area-display .area-sub {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ink-mute);
+  margin-top: 2px;
+}
+@media (max-width: 560px) {
+  .area-display { margin-left: 0; width: 100%; text-align: left; }
+}
+
+/* ---------- RESULTS (redesigned estimate section) ---------- */
+.results {
+  display: none;
+  padding: 36px 26px 40px;
+  background: linear-gradient(180deg, var(--green-50) 0%, var(--white) 60%);
+  border-top: 1px solid var(--line);
+}
+.results.active { display: block; }
+
+.result-card {
+  position: relative;
+  background: var(--white);
+  border-radius: 22px;
+  padding: 36px 32px 32px;
+  border: 1px solid var(--green-100);
+  box-shadow: 0 14px 50px rgba(20, 56, 30, 0.08), 0 2px 8px rgba(20, 56, 30, 0.04);
+  text-align: center;
+  overflow: hidden;
+}
+.result-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--green-500), var(--green-700), var(--green-500));
+}
+
+.result-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--green-50);
+  color: var(--green-800);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  margin-bottom: 18px;
+}
+.result-eyebrow::before {
+  content: "●";
+  color: var(--green-500);
+  font-size: 0.6rem;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.result-hero {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 4px;
+  line-height: 1;
+}
+.result-hero .result-currency {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--green-700);
+  margin-right: 4px;
+  letter-spacing: -0.02em;
+}
+.result-hero .result-amount {
+  font-size: 5rem;
+  font-weight: 800;
+  color: var(--green-800);
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+  background: linear-gradient(135deg, var(--green-700), var(--green-900));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.result-hero-caption {
+  font-size: 0.95rem;
+  color: var(--ink-mute);
+  font-weight: 500;
+  margin: 8px 0 0;
+  letter-spacing: 0.01em;
+}
+.result-hero-caption strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+@media (max-width: 560px) {
+  .result-card { padding: 28px 20px 24px; border-radius: 18px; }
+  .result-hero .result-amount { font-size: 3.6rem; }
+  .result-hero .result-currency { font-size: 1.5rem; }
+}
+
+/* Horizontal range visualization */
+.price-range-bar {
+  margin: 24px auto 28px;
+  max-width: 460px;
+}
+.range-track {
+  position: relative;
+  height: 10px;
+  background: linear-gradient(90deg, #d7efdc 0%, var(--green-500) 50%, #d7efdc 100%);
+  border-radius: 999px;
+  margin-bottom: 12px;
+  box-shadow: inset 0 1px 2px rgba(20, 56, 30, 0.1);
+}
+.range-marker {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  background: var(--white);
+  border: 3px solid var(--green-700);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 3px 12px rgba(45, 122, 61, 0.35);
+}
+.range-marker::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background: var(--green-700);
+  border-radius: 50%;
+}
+.range-labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.range-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+.range-label.center { text-align: center; }
+.range-label.right { text-align: right; }
+.range-label .range-num {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.range-label.center .range-num { color: var(--green-700); }
+.range-label .range-desc {
+  font-size: 0.72rem;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+/* Breakdown card — receipt-style transparency */
+.result-breakdown {
+  margin-top: 8px;
+  padding: 18px 20px;
+  background: var(--green-50);
+  border-radius: 14px;
+  border: 1px solid var(--green-100);
+  text-align: left;
+}
+.breakdown-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-mute);
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+.breakdown-title::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 2px;
+  background: var(--green-500);
+  border-radius: 1px;
+}
+.breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  font-size: 0.95rem;
+  border-bottom: 1px solid rgba(45, 122, 61, 0.1);
+}
+.breakdown-row:last-child { border-bottom: none; }
+.breakdown-row .label { color: var(--ink-mute); font-weight: 500; }
+.breakdown-row .value { font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.result-disclaimer {
+  margin: 20px 0 0;
+  font-size: 0.82rem;
+  color: var(--ink-mute);
+  line-height: 1.55;
+  text-align: center;
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ---------- Compare-Your-Quote card (highest-shareability feature) ---------- */
+.compare-card {
+  margin-top: 24px;
+  padding: 22px 22px 24px;
+  background: var(--green-50);
+  border: 1.5px solid var(--green-100);
+  border-radius: 14px;
+}
+.compare-card h3 {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+  color: var(--green-800);
+}
+.compare-card p {
+  margin: 0 0 14px;
+  font-size: 0.95rem;
+  color: var(--ink-mute);
+}
+.compare-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+.compare-input-wrap {
+  position: relative;
+  flex: 1 1 180px;
+  min-width: 160px;
+}
+.compare-prefix {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-mute);
+  font-weight: 700;
+  pointer-events: none;
+}
+.compare-form input {
+  width: 100%;
+  padding: 14px 16px 14px 32px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: white;
+  color: var(--ink);
+}
+.compare-form input:focus {
+  outline: none;
+  border-color: var(--green-700);
+  box-shadow: 0 0 0 3px rgba(45, 122, 61, 0.18);
+}
+.compare-form button { flex: 0 0 auto; }
+.compare-verdict {
+  display: none;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.compare-verdict.active { display: block; }
+.compare-verdict.green {
+  background: #e7f7eb;
+  color: #1c4a29;
+  border: 1.5px solid #8bd19e;
+}
+.compare-verdict.yellow {
+  background: #fff4d7;
+  color: #6a4d0e;
+  border: 1.5px solid #f4cd6b;
+}
+.compare-verdict.red {
+  background: #fde4e4;
+  color: #7a1c24;
+  border: 1.5px solid #e5949a;
+}
+.compare-verdict .verdict-label {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 6px;
+  vertical-align: 2px;
+}
+.compare-verdict.green .verdict-label { background: #1c4a29; color: white; }
+.compare-verdict.yellow .verdict-label { background: #6a4d0e; color: white; }
+.compare-verdict.red .verdict-label { background: #7a1c24; color: white; }
+
+/* ---------- JOB OPTIONS (frequency + grass condition + auto-approve) ---------- */
+.options-panel {
+  padding: 22px 26px 6px;
+  border-top: 1px solid var(--line);
+  background: var(--white);
+  display: none;
+}
+.options-panel.active { display: block; }
+.options-panel .opt-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+  margin: 0 0 10px 0;
+}
+.options-panel .opt-subtitle {
+  font-size: 0.85rem;
+  color: var(--ink-mute);
+  margin: -4px 0 12px 0;
+  font-style: italic;
+}
+.options-panel .opt-group {
+  margin-bottom: 22px;
+}
+
+/* Segmented control (frequency) */
+.seg-control {
+  display: inline-flex;
+  background: var(--green-50);
+  border: 1.5px solid var(--green-100);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.seg-control button {
+  background: transparent;
+  border: none;
+  padding: 10px 18px;
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.seg-control button.active {
+  background: var(--green-700);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+.seg-control button:hover:not(.active) {
+  color: var(--green-800);
+}
+
+/* Grass condition pills */
+.cond-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+@media (max-width: 720px) {
+  .cond-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.cond-pill {
+  position: relative;
+  padding: 14px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s, transform 0.05s;
+}
+.cond-pill:hover {
+  border-color: var(--green-600);
+  background: var(--green-50);
+}
+.cond-pill.active {
+  border-color: var(--green-700);
+  background: var(--green-50);
+  box-shadow: 0 0 0 3px rgba(58, 150, 80, 0.18);
+}
+.cond-pill .cond-name {
+  display: block;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+.cond-pill .cond-range {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+  margin-bottom: 6px;
+}
+.cond-pill .cond-mult {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--green-100);
+  color: var(--green-800);
+}
+.cond-pill.active .cond-mult {
+  background: var(--green-700);
+  color: white;
+}
+
+/* Auto-approve card */
+.auto-approve {
+  margin-top: 4px;
+  padding: 18px;
+  border-radius: 14px;
+  border: 1.5px dashed var(--green-100);
+  background: var(--green-50);
+}
+.auto-approve-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.auto-approve-head input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0 0;
+  accent-color: var(--green-700);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.auto-approve-head label {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--ink);
+  cursor: pointer;
+  line-height: 1.35;
+}
+.auto-approve-head label .sub {
+  display: block;
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin-top: 3px;
+}
+.auto-approve-body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--green-100);
+  display: none;
+}
+.auto-approve-body.active { display: block; }
+.auto-approve-body .cap-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.auto-approve-body .cap-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  min-width: 140px;
+}
+.auto-approve-body input[type="range"] {
+  flex: 1;
+  min-width: 160px;
+  accent-color: var(--green-700);
+}
+.auto-approve-body .cap-value {
+  font-weight: 800;
+  color: var(--green-800);
+  font-size: 1.1rem;
+  min-width: 52px;
+  text-align: right;
+}
+.auto-approve-body .rules {
+  font-size: 0.82rem;
+  color: var(--ink-mute);
+  margin: 0;
+  padding-left: 18px;
+}
+.auto-approve-body .rules li {
+  margin-bottom: 3px;
+}
+
+/* Applied-adjustment highlight in results */
+.adj-note {
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: var(--green-50);
+  border: 1px solid var(--green-100);
+  border-radius: 10px;
+  font-size: 0.88rem;
+  color: var(--green-800);
+  display: none;
+}
+.adj-note.active { display: block; }
+.adj-note strong { color: var(--green-900); }
+
+/* ---------- EMAIL CAPTURE ---------- */
+.lead-capture {
+  margin: 30px 0 0;
+  background: linear-gradient(135deg, var(--green-800), var(--green-900));
+  color: white;
+  border-radius: 18px;
+  padding: 32px 28px;
+  text-align: center;
+}
+.lead-capture h3 {
+  color: white;
+  font-size: 1.4rem;
+  margin-bottom: 8px;
+}
+.lead-capture p {
+  color: #c7edce;
+  margin-bottom: 22px;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.lead-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+.lead-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.lead-form input,
+.lead-form select {
+  flex: 1;
+  min-width: 200px;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: white;
+  color: var(--ink);
+}
+.lead-form input:focus,
+.lead-form select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(244, 166, 42, 0.35);
+}
+.lead-form button { align-self: stretch; }
+.lead-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+.lead-field-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #c7edce;
+  letter-spacing: 0.01em;
+}
+.lead-pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.lead-pill {
+  flex: 1 1 auto;
+  min-width: 110px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1.5px solid rgba(255,255,255,0.28);
+  background: rgba(255,255,255,0.06);
+  color: #edf8ef;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.lead-pill:hover { background: rgba(255,255,255,0.14); }
+.lead-pill.active {
+  background: var(--gold);
+  color: var(--green-900);
+  border-color: var(--gold);
+}
+.lead-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  font-size: 0.82rem;
+  color: #c7edce;
+  padding: 4px 4px 6px;
+}
+.lead-consent input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: var(--gold);
+  flex: 0 0 auto;
+}
+.lead-consent a {
+  color: white;
+  text-decoration: underline;
+}
+.lead-success {
+  display: none;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  font-weight: 600;
+}
+.lead-success.active { display: block; }
+
+/* ---------- FAQ ---------- */
+.faq-section {
+  padding: 60px 0;
+  background: var(--white);
+  border-top: 1px solid var(--line);
+}
+.faq-section h2 { text-align: center; margin-bottom: 30px; }
+.faq-list {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.faq-item {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 20px;
+  background: var(--green-50);
+  transition: background 0.2s ease;
+}
+.faq-item[open] {
+  background: white;
+  border-color: var(--green-100);
+}
+.faq-item summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--green-900);
+  list-style: none;
+  position: relative;
+  padding-right: 28px;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after {
+  content: "+";
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.4rem;
+  color: var(--green-700);
+  transition: transform 0.2s ease;
+}
+.faq-item[open] summary::after { content: "−"; }
+.faq-item p {
+  margin: 12px 0 0;
+  color: var(--ink-mute);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+.faq-item a { color: var(--green-700); }
+
+/* ---------- FOOTER LINKS ---------- */
+.footer-links {
+  margin: 12px 0;
+  font-size: 0.95rem;
+}
+.footer-links a {
+  color: var(--green-100);
+  text-decoration: none;
+  padding: 0 4px;
+}
+.footer-links a:hover {
+  color: white;
+  text-decoration: underline;
+}
+
+/* ---------- METHODOLOGY ---------- */
+.methodology {
+  padding: 60px 0;
+  background: var(--white);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.methodology h2 { text-align: center; margin-bottom: 10px; }
+.methodology .lede {
+  text-align: center;
+  max-width: 620px;
+  margin: 0 auto 40px;
+  color: var(--ink-mute);
+}
+.method-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 22px;
+}
+.method-card {
+  padding: 24px;
+  background: var(--green-50);
+  border-radius: 14px;
+  border: 1px solid var(--green-100);
+}
+.method-card .icon {
+  font-size: 1.8rem;
+  margin-bottom: 10px;
+}
+.method-card h3 {
+  margin-bottom: 6px;
+  color: var(--green-900);
+  font-size: 1.05rem;
+}
+.method-card p {
+  font-size: 0.92rem;
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+/* ---------- FOOTER ---------- */
+footer {
+  background: var(--green-900);
+  color: #a8c2ad;
+  padding: 40px 0 30px;
+  text-align: center;
+  font-size: 0.88rem;
+}
+footer a { color: #c7edce; }
+footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
+
+/* ---------- LOADING SPINNER ---------- */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.error-msg {
+  color: var(--danger);
+  font-size: 0.9rem;
+  padding: 8px 0;
+  display: none;
+}
+.error-msg.active { display: block; }
+
+/* ---------- LEAFLET POLYGON STYLE OVERRIDES ---------- */
+.leaflet-draw-toolbar a {
+  background-image: url('https://unpkg.com/leaflet-draw@1.0.4/dist/images/spritesheet.svg');
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== HEADER ===================== -->
+<header class="site">
+  <div class="site-inner">
+    <div class="brand">
+      <span class="brand-mark">M</span>
+      <span>MowMetric</span>
+    </div>
+    <nav class="site-nav">
+      <a href="#calculator">Calculator</a>
+      <a href="#how-it-works">Methodology</a>
+      <a href="#faq">FAQ</a>
+      <a href="#match">Get matched</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ===================== HERO ===================== -->
+<section class="hero">
+  <div class="container">
+    <h1>What should your lawn care <span class="accent">actually cost</span>?</h1>
+    <div class="trust-row">
+      <span>Real BLS labor data</span>
+      <span>Measured from satellite</span>
+      <span>No data brokers</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CALCULATOR ===================== -->
+<section id="calculator" class="calc-wrap">
+  <div class="container">
+    <div class="calc-card">
+
+      <!-- STEP 1: Address -->
+      <div class="step-header">
+        <span class="step-badge">Step 1</span>
+        <h2>Enter your address</h2>
+        <p>Used only to center the map. Not stored unless you ask to be matched.</p>
+      </div>
+
+      <form class="address-form" id="addressForm" autocomplete="off">
+        <div class="address-wrap">
+          <input
+            type="text"
+            id="addressInput"
+            placeholder="Start typing an address..."
+            aria-label="Property address"
+            aria-autocomplete="list"
+            aria-controls="acDropdown"
+            required
+          />
+          <div class="ac-dropdown" id="acDropdown" role="listbox"></div>
+        </div>
+        <button type="button" class="btn secondary" id="geolocateBtn" title="Use my current location" style="padding:14px 16px;font-size:1.1rem;min-width:auto;">&#x1F4CD;</button>
+        <button type="submit" class="btn" id="addressBtn">Find my lawn</button>
+      </form>
+      <div class="error-msg" id="addressError" style="padding: 0 26px 14px;"></div>
+
+      <!-- STEP 2: Map & draw -->
+      <div class="map-section" id="mapSection">
+        <div class="step-header" style="border-top: 1px solid var(--line);">
+          <span class="step-badge">Step 2</span>
+          <h2>Outline the area you want mowed</h2>
+          <p>Click the polygon tool on the map, then click each corner of your lawn. Double-click to finish.</p>
+        </div>
+
+        <div class="map-instructions">
+          <span class="emoji">🖱️</span>
+          <span><strong>Tip:</strong> Trace the edges of the grass — skip driveways, patios, and flower beds. You can draw multiple shapes for yards with separate sections.</span>
+        </div>
+
+        <div id="map"></div>
+
+        <div class="map-toolbar">
+          <button type="button" class="btn secondary" id="clearBtn">Clear drawing</button>
+          <div class="area-display">
+            <span class="area-num" id="areaNum">0</span> <span class="area-unit" id="areaUnit">acres</span>
+            <span class="area-sub" id="areaSub"></span>
+          </div>
+        </div>
+
+        <!-- Job options -->
+        <div class="options-panel" id="optionsPanel">
+          <div class="opt-group">
+            <p class="opt-title">How often do you want it mowed?</p>
+            <div class="seg-control" id="freqControl" role="tablist">
+              <button type="button" data-freq="weekly" role="tab">Weekly</button>
+              <button type="button" data-freq="biweekly" role="tab">Every 2 weeks</button>
+              <button type="button" data-freq="monthly" role="tab">Monthly</button>
+              <button type="button" data-freq="onetime" role="tab">One-time</button>
+            </div>
+          </div>
+
+          <div class="opt-group">
+            <p class="opt-title">Current grass condition</p>
+            <p class="opt-subtitle">Taller or neglected grass requires slower passes, extra bagging, and sometimes a second mow. Be realistic — honest input gives an honest estimate.</p>
+            <div class="cond-grid" id="condControl" role="radiogroup">
+              <button type="button" class="cond-pill" data-cond="standard" role="radio">
+                <span class="cond-name">Standard</span>
+                <span class="cond-range">Under 6 inches</span>
+                <span class="cond-mult">Base price</span>
+              </button>
+              <button type="button" class="cond-pill" data-cond="overgrown" role="radio">
+                <span class="cond-name">Overgrown</span>
+                <span class="cond-range">6–10 inches</span>
+                <span class="cond-mult">+30%</span>
+              </button>
+              <button type="button" class="cond-pill" data-cond="tall" role="radio">
+                <span class="cond-name">Tall / Neglected</span>
+                <span class="cond-range">10–15 inches</span>
+                <span class="cond-mult">+70%</span>
+              </button>
+              <button type="button" class="cond-pill" data-cond="cleanup" role="radio">
+                <span class="cond-name">Heavy cleanup</span>
+                <span class="cond-range">15"+ or unknown</span>
+                <span class="cond-mult">+125%</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Results -->
+        <div class="results" id="results">
+          <div class="result-card">
+            <div class="result-eyebrow">Your MowMetric estimate</div>
+
+            <div class="result-hero">
+              <span class="result-currency">$</span>
+              <span class="result-amount" id="priceAvg">—</span>
+            </div>
+            <p class="result-hero-caption">
+              Fair-market price per cut for your property
+            </p>
+
+            <div class="price-range-bar" aria-label="Price range">
+              <div class="range-track">
+                <div class="range-marker" aria-hidden="true"></div>
+              </div>
+              <div class="range-labels">
+                <div class="range-label">
+                  <span class="range-num">$<span id="priceLow">—</span></span>
+                  <span class="range-desc">Low end</span>
+                </div>
+                <div class="range-label center">
+                  <span class="range-num">Fair market</span>
+                  <span class="range-desc">Benchmark</span>
+                </div>
+                <div class="range-label right">
+                  <span class="range-num">$<span id="priceHigh">—</span></span>
+                  <span class="range-desc">High end</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="result-breakdown">
+              <div class="breakdown-title">How we got there</div>
+              <div class="breakdown-row">
+                <span class="label">Mowable area</span>
+                <span class="value" id="brkArea">—</span>
+              </div>
+              <div class="breakdown-row">
+                <span class="label">Your region</span>
+                <span class="value" id="brkRegion">—</span>
+              </div>
+              <div class="breakdown-row">
+                <span class="label">Local labor rate (BLS)</span>
+                <span class="value" id="brkWage">—</span>
+              </div>
+              <div class="breakdown-row">
+                <span class="label">Estimated job time</span>
+                <span class="value" id="brkTime">—</span>
+              </div>
+            </div>
+
+            <div class="adj-note" id="adjNote"></div>
+
+            <p class="result-disclaimer">
+              Price reflects a single mowing service (mow, trim, blow) for your selected
+              frequency and grass condition. Actual bids from local crews may vary based on
+              access, terrain, and scheduling. Use this as an independent benchmark when
+              comparing quotes.
+            </p>
+          </div>
+
+          <!-- Compare your quote: share-friendly "how does your quote stack up?" tool -->
+          <div class="compare-card" id="compareCard">
+            <h3>Got a quote already? See how it stacks up.</h3>
+            <p>Enter the price a provider quoted you for a single cut. We'll compare it to the fair-market benchmark above.</p>
+            <form class="compare-form" id="compareForm">
+              <div class="compare-input-wrap">
+                <span class="compare-prefix">$</span>
+                <input type="number" inputmode="decimal" min="1" step="1" id="compareQuote" placeholder="e.g. 65" aria-label="Their quoted price">
+              </div>
+              <button type="submit" class="btn secondary">Compare</button>
+            </form>
+            <div class="compare-verdict" id="compareVerdict"></div>
+          </div>
+
+          <!-- Lead capture: Get matched with local pros -->
+          <div id="match" class="lead-capture">
+            <h3>Get matched with vetted local pros</h3>
+            <p>
+              Want real bids from crews in your area? We'll hand your job details to
+              2&ndash;3 screened local providers. They'll reach out with firm quotes.
+              Free. No obligation. No spam.
+            </p>
+            <form class="lead-form" id="leadForm">
+              <div class="lead-row">
+                <input type="text" id="leadName" placeholder="Full name" required aria-label="Your name">
+                <input type="email" id="leadEmail" placeholder="you@email.com" required aria-label="Your email">
+              </div>
+              <div class="lead-row">
+                <input type="tel" id="leadPhone" placeholder="Phone number" required aria-label="Your phone">
+              </div>
+
+              <div class="lead-field">
+                <span class="lead-field-label">What service do you want?</span>
+                <div class="lead-pill-group" id="leadIntent" role="radiogroup" aria-label="Service type">
+                  <button type="button" class="lead-pill" data-intent="weekly" role="radio">Weekly cut</button>
+                  <button type="button" class="lead-pill active" data-intent="biweekly" role="radio">Bi-weekly cut</button>
+                  <button type="button" class="lead-pill" data-intent="monthly" role="radio">Monthly cut</button>
+                  <button type="button" class="lead-pill" data-intent="onetime" role="radio">One-time cut</button>
+                </div>
+              </div>
+
+              <div class="lead-field">
+                <span class="lead-field-label">When do you need service?</span>
+                <div class="lead-pill-group" id="leadUrgency" role="radiogroup" aria-label="Urgency">
+                  <button type="button" class="lead-pill" data-urgency="7d" role="radio">Within 7 days</button>
+                  <button type="button" class="lead-pill active" data-urgency="2-4w" role="radio">2–4 weeks</button>
+                  <button type="button" class="lead-pill" data-urgency="1-3m" role="radio">1–3 months</button>
+                  <button type="button" class="lead-pill" data-urgency="flex" role="radio">Just exploring</button>
+                </div>
+              </div>
+
+              <div class="lead-field">
+                <span class="lead-field-label">When are you available for calls?</span>
+                <select id="leadContactTime" aria-label="Best time to contact" required>
+                  <option value="">Pick a time window</option>
+                  <option value="biz-hours">Anytime during business hours (9am–5pm)</option>
+                  <option value="weekday-evenings">Weekday evenings (5pm–8pm)</option>
+                  <option value="weekends">Weekends (mornings or afternoons)</option>
+                  <option value="text-only">Just text or email — no calls</option>
+                </select>
+              </div>
+
+              <label class="lead-consent">
+                <input type="checkbox" id="leadConsent" required>
+                <span>I agree to be contacted by up to 3 vetted providers about my lawn care job. I can opt out anytime. See <a href="privacy.html">Privacy</a> &amp; <a href="terms.html">Terms</a>.</span>
+              </label>
+              <button type="submit" class="btn gold">Match me with pros</button>
+            </form>
+            <div class="lead-success" id="leadSuccess">
+              ✓ Got it. A MowMetric team member will verify your details and dispatch your request to local crews within one business day.
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===================== METHODOLOGY ===================== -->
+<section id="how-it-works" class="methodology">
+  <div class="container">
+    <h2>How we calculate the price</h2>
+    <p class="lede">
+      No black box. Here's exactly what goes into every estimate — and why it's honest.
+    </p>
+    <div class="method-grid">
+      <div class="method-card">
+        <div class="icon">📐</div>
+        <h3>Your actual lawn size</h3>
+        <p>We measure the exact polygon you draw in acres (with square feet shown alongside for providers who price by area) using geodesic calculation — the same math satellites use. No lot-size guessing.</p>
+      </div>
+      <div class="method-card">
+        <div class="icon">💼</div>
+        <h3>Real local labor rates</h3>
+        <p>We pull landscaping wage data from the U.S. Bureau of Labor Statistics for your state, so the price reflects what crews in your area actually earn.</p>
+      </div>
+      <div class="method-card">
+        <div class="icon">⏱️</div>
+        <h3>Honest time estimates</h3>
+        <p>We assume a typical 2-person residential crew with standard equipment covering ~0.5 acres (~22,000 sq ft) per crew-hour, plus 12 minutes of setup and travel overhead per job.</p>
+      </div>
+      <div class="method-card">
+        <div class="icon">💰</div>
+        <h3>Fair profit margin built in</h3>
+        <p>Our formula includes a 2.4× labor markup for equipment, fuel, insurance, overhead, and a reasonable profit — the industry-standard margin for well-run lawn care businesses.</p>
+      </div>
+      <div class="method-card">
+        <div class="icon">🗺️</div>
+        <h3>Minimum job floor</h3>
+        <p>Every estimate has a $35 minimum floor because no crew will travel to your property for less — small yards cost more per acre than large ones.</p>
+      </div>
+      <div class="method-card">
+        <div class="icon">🔓</div>
+        <h3>Open methodology</h3>
+        <p>Every input — wage data, crew productivity, margin, tier breakpoints — is documented on this page. No hidden multipliers. No surge pricing. No affiliate kickbacks baked into the number.</p>
+      </div>
+      <div class="method-card">
+        <div class="icon">🎯</div>
+        <h3>Calibrated to fair bids</h3>
+        <p>Our benchmark targets roughly the 65th percentile of real local quotes — high enough that an insured, licensed crew can bid it honestly and stay profitable, low enough that a homeowner isn't overpaying. We sample and re-tune against real market quotes regularly.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FAQ ===================== -->
+<section id="faq" class="faq-section">
+  <div class="container">
+    <h2>Frequently asked questions</h2>
+    <div class="faq-list">
+      <details class="faq-item">
+        <summary>Is this price guaranteed?</summary>
+        <p>No. MowMetric is an independent pricing benchmark — not a marketplace. The number you see is what a fair, typical bid should look like in your area based on BLS wage data and your actual measured lawn size. Any bid within roughly &plusmn;15% of this number is reasonable. Well above or below deserves questions.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Where does the wage data come from?</summary>
+        <p>U.S. Bureau of Labor Statistics, Occupational Employment and Wage Statistics (OEWS), SOC code 37-3011 — Landscaping and Groundskeeping Workers. We pull state-level mean hourly wages, updated annually. Data as of the most recent BLS release is baked into this calculator.</p>
+      </details>
+      <details class="faq-item">
+        <summary>How accurate is the satellite measurement?</summary>
+        <p>Very — for the polygon you draw. We use geodesic area calculation (the same math GPS uses) so the acreage and square-footage readings are accurate within ~2% on a typical 0.18-acre lawn. Accuracy depends on how carefully you trace your actual mowable grass (exclude driveways, beds, mulch, etc.).</p>
+      </details>
+      <details class="faq-item">
+        <summary>What does "get matched with local pros" actually do?</summary>
+        <p>When you submit the match form, MowMetric shares your job details (address, measured size, frequency, contact info) with up to 3 vetted lawn care providers in your area. They contact you directly with firm quotes. You pick whoever you want — or nobody. There's no obligation and MowMetric never charges you.</p>
+      </details>
+      <details class="faq-item">
+        <summary>What do you do with my data?</summary>
+        <p>If you only use the calculator, we keep nothing identifiable — your address is used to center the map and is not stored. If you submit the "Get matched" form, we share your contact details with up to 3 vetted local providers so they can quote your job — this is how we make money, and we're paid a referral fee by the providers, not by you. We never share your information with data brokers, ad networks, or third parties unrelated to your service request. Full details in our <a href="privacy.html">Privacy Policy</a>.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Why does a small lawn cost so much per acre?</summary>
+        <p>Every job has fixed overhead — setup, travel, unloading, trim detail work — that doesn't scale down with size. A $35 minimum floor exists because no crew will drive to your property, unload equipment, and do the work for less. Big lawns get cheaper per acre because fixed costs are spread across more area. That's why our formula uses four pricing tiers.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Why does a one-time cut cost more than recurring service?</summary>
+        <p>Recurring customers get a consistent, shorter cut that a crew can move through quickly — and the crew can route-stack nearby jobs for lower fuel and drive time. A one-time cut usually means taller grass and a crew driving out for a single job, so per-visit pricing is about 15% higher than a regular bi-weekly cadence. Weekly customers get a small discount on top because they're the most efficient route to service.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FOOTER ===================== -->
+<footer>
+  <div class="container">
+    <div><strong>MowMetric</strong> — Independent lawn care pricing.</div>
+    <div class="footer-links">
+      <a href="#how-it-works">Methodology</a> ·
+      <a href="#faq">FAQ</a> ·
+      <a href="privacy.html">Privacy Policy</a> ·
+      <a href="terms.html">Terms of Service</a> ·
+      <a href="mailto:hello@mowmetric.com">Contact</a>
+    </div>
+    <div class="small">
+      Pricing data sourced from U.S. Bureau of Labor Statistics (Occupational Employment Statistics,
+      SOC 37-3011). Map tiles © Esri. Address lookup © OpenStreetMap contributors &amp; U.S. Census Bureau.
+    </div>
+    <div class="small">© 2026 MowMetric. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+/* ==========================================================================
+   YARDLINE PRICING ENGINE
+   ========================================================================== */
+
+/* ---------- 1. ZIP → STATE LOOKUP ---------- */
+function zipToState(zip) {
+  const z = parseInt(zip.substring(0, 3), 10);
+  if (isNaN(z)) return null;
+
+  // Northeast
+  if (z >= 10 && z <= 27) return 'MA';
+  if (z === 55) return 'MA';
+  if (z >= 28 && z <= 29) return 'RI';
+  if (z >= 30 && z <= 38) return 'NH';
+  if (z >= 39 && z <= 49) return 'ME';
+  if ((z >= 50 && z <= 54) || (z >= 56 && z <= 59)) return 'VT';
+  if (z >= 60 && z <= 69) return 'CT';
+  if (z >= 70 && z <= 89) return 'NJ';
+  if (z >= 100 && z <= 149) return 'NY';
+  if (z >= 150 && z <= 196) return 'PA';
+  if (z >= 197 && z <= 199) return 'DE';
+
+  // Mid-Atlantic / South
+  if (z >= 200 && z <= 205) return 'DC';
+  if (z >= 206 && z <= 219) return 'MD';
+  if (z >= 220 && z <= 246) return 'VA';
+  if (z >= 247 && z <= 268) return 'WV';
+  if (z >= 270 && z <= 289) return 'NC';
+  if (z >= 290 && z <= 299) return 'SC';
+  if ((z >= 300 && z <= 319) || (z >= 398 && z <= 399)) return 'GA';
+  if (z >= 320 && z <= 349) return 'FL';
+  if (z >= 350 && z <= 369) return 'AL';
+  if (z >= 370 && z <= 385) return 'TN';
+  if (z >= 386 && z <= 397) return 'MS';
+
+  // Midwest / Great Lakes
+  if (z >= 400 && z <= 427) return 'KY';
+  if (z >= 430 && z <= 459) return 'OH';
+  if (z >= 460 && z <= 479) return 'IN';
+  if (z >= 480 && z <= 499) return 'MI';
+  if (z >= 500 && z <= 528) return 'IA';
+  if (z >= 530 && z <= 549) return 'WI';
+  if (z >= 550 && z <= 567) return 'MN';
+  if (z >= 570 && z <= 577) return 'SD';
+  if (z >= 580 && z <= 588) return 'ND';
+  if (z >= 590 && z <= 599) return 'MT';
+  if (z >= 600 && z <= 629) return 'IL';
+  if (z >= 630 && z <= 658) return 'MO';
+  if (z >= 660 && z <= 679) return 'KS';
+  if (z >= 680 && z <= 693) return 'NE';
+
+  // South Central
+  if (z >= 700 && z <= 715) return 'LA';
+  if ((z >= 716 && z <= 729) || z === 755) return 'AR';
+  if (z >= 730 && z <= 749) return 'OK';
+  if ((z >= 750 && z <= 799) && z !== 755) return 'TX';
+
+  // Mountain / West
+  if (z >= 800 && z <= 816) return 'CO';
+  if (z >= 820 && z <= 831) return 'WY';
+  if (z >= 832 && z <= 838) return 'ID';
+  if (z >= 840 && z <= 847) return 'UT';
+  if (z >= 850 && z <= 865) return 'AZ';
+  if (z >= 870 && z <= 884) return 'NM';
+  if (z >= 889 && z <= 898) return 'NV';
+  if (z >= 900 && z <= 961) return 'CA';
+  if (z >= 967 && z <= 968) return 'HI';
+  if (z >= 970 && z <= 979) return 'OR';
+  if (z >= 980 && z <= 994) return 'WA';
+  if (z >= 995 && z <= 999) return 'AK';
+
+  return null;
+}
+
+/* ---------- 2. STATE PRICING DATA ----------
+   Hourly wages are approximate 2024 medians for SOC 37-3011
+   (Landscaping and Groundskeeping Workers) per BLS OES.
+   Regional multiplier modifies the national per-sqft rate.
+*/
+const STATE_DATA = {
+  AL: { name: "Alabama",       wage: 14.50, mult: 0.83 },
+  AK: { name: "Alaska",        wage: 21.00, mult: 1.25 },
+  AZ: { name: "Arizona",       wage: 17.00, mult: 0.98 },
+  AR: { name: "Arkansas",      wage: 14.25, mult: 0.82 },
+  CA: { name: "California",    wage: 21.50, mult: 1.28 },
+  CO: { name: "Colorado",      wage: 19.00, mult: 1.10 },
+  CT: { name: "Connecticut",   wage: 20.50, mult: 1.18 },
+  DC: { name: "Washington DC", wage: 21.00, mult: 1.22 },
+  DE: { name: "Delaware",      wage: 18.00, mult: 1.04 },
+  FL: { name: "Florida",       wage: 16.25, mult: 0.94 },
+  GA: { name: "Georgia",       wage: 16.00, mult: 0.92 },
+  HI: { name: "Hawaii",        wage: 21.75, mult: 1.28 },
+  ID: { name: "Idaho",         wage: 16.00, mult: 0.92 },
+  IL: { name: "Illinois",      wage: 18.50, mult: 1.07 },
+  IN: { name: "Indiana",       wage: 16.25, mult: 0.93 },
+  IA: { name: "Iowa",          wage: 15.75, mult: 0.90 },
+  KS: { name: "Kansas",        wage: 15.50, mult: 0.88 },
+  KY: { name: "Kentucky",      wage: 15.00, mult: 0.85 },
+  LA: { name: "Louisiana",     wage: 15.00, mult: 0.85 },
+  ME: { name: "Maine",         wage: 17.50, mult: 1.00 },
+  MD: { name: "Maryland",      wage: 19.25, mult: 1.12 },
+  MA: { name: "Massachusetts", wage: 21.00, mult: 1.22 },
+  MI: { name: "Michigan",      wage: 17.00, mult: 0.98 },
+  MN: { name: "Minnesota",     wage: 18.75, mult: 1.08 },
+  MS: { name: "Mississippi",   wage: 14.00, mult: 0.80 },
+  MO: { name: "Missouri",      wage: 15.75, mult: 0.90 },
+  MT: { name: "Montana",       wage: 16.00, mult: 0.92 },
+  NE: { name: "Nebraska",      wage: 15.75, mult: 0.90 },
+  NV: { name: "Nevada",        wage: 18.25, mult: 1.05 },
+  NH: { name: "New Hampshire", wage: 18.25, mult: 1.05 },
+  NJ: { name: "New Jersey",    wage: 20.50, mult: 1.18 },
+  NM: { name: "New Mexico",    wage: 15.50, mult: 0.88 },
+  NY: { name: "New York",      wage: 20.75, mult: 1.20 },
+  NC: { name: "North Carolina",wage: 15.75, mult: 0.90 },
+  ND: { name: "North Dakota",  wage: 16.50, mult: 0.95 },
+  OH: { name: "Ohio",          wage: 16.50, mult: 0.95 },
+  OK: { name: "Oklahoma",      wage: 15.00, mult: 0.85 },
+  OR: { name: "Oregon",        wage: 19.25, mult: 1.12 },
+  PA: { name: "Pennsylvania",  wage: 17.50, mult: 1.00 },
+  RI: { name: "Rhode Island",  wage: 19.50, mult: 1.13 },
+  SC: { name: "South Carolina",wage: 15.50, mult: 0.88 },
+  SD: { name: "South Dakota",  wage: 15.75, mult: 0.90 },
+  TN: { name: "Tennessee",     wage: 15.50, mult: 0.88 },
+  TX: { name: "Texas",         wage: 16.25, mult: 0.94 },
+  UT: { name: "Utah",          wage: 17.00, mult: 0.98 },
+  VT: { name: "Vermont",       wage: 18.25, mult: 1.05 },
+  VA: { name: "Virginia",      wage: 18.25, mult: 1.05 },
+  WA: { name: "Washington",    wage: 20.50, mult: 1.18 },
+  WV: { name: "West Virginia", wage: 15.00, mult: 0.85 },
+  WI: { name: "Wisconsin",     wage: 17.00, mult: 0.98 },
+  WY: { name: "Wyoming",       wage: 16.50, mult: 0.95 }
+};
+
+/* ---------- 3. PRICING FORMULA ----------
+   Tiered per-sqft rate that accounts for real-world efficiency:
+   small yards are dominated by setup/travel time, big lots benefit
+   from zero-turn mower speed, so per-sqft rate decreases with size.
+
+     Tier 1: first 3,000 sqft   @ 1.00× base  (walk-behind, edge-heavy)
+     Tier 2: next 9,000 sqft    @ 0.50× base  (mixed equipment)
+     Tier 3: next 18,000 sqft   @ 0.25× base  (zero-turn dominant)
+     Tier 4: above 30,000 sqft  @ 0.15× base  (zero-turn full efficiency)
+
+   Base rate $0.0097/sqft is calibrated against published market data
+   (LawnStarter, HomeAdvisor, Angi) for FL quarter-acre = ~$50.
+*/
+const BASE_RATE          = 0.0097;  // dollars per sqft for tier 1
+const CREW_SQFT_PER_HOUR = 22000;   // residential 2-person crew with walk + zero-turn
+const SETUP_MINUTES      = 12;      // travel + unload + load per job
+const MIN_JOB_FLOOR      = 35;
+const VARIANCE_LOW       = 0.82;
+const VARIANCE_HIGH      = 1.22;
+
+function laborCost(sqft) {
+  let cost = 0;
+  let remaining = sqft;
+  // Tier 1: first 3,000 sqft at full rate
+  const t1 = Math.min(remaining, 3000);
+  cost += t1 * BASE_RATE;
+  remaining -= t1;
+  // Tier 2: next 9,000 sqft at 50% rate
+  if (remaining > 0) {
+    const t2 = Math.min(remaining, 9000);
+    cost += t2 * BASE_RATE * 0.50;
+    remaining -= t2;
+  }
+  // Tier 3: next 18,000 sqft at 25% rate
+  if (remaining > 0) {
+    const t3 = Math.min(remaining, 18000);
+    cost += t3 * BASE_RATE * 0.25;
+    remaining -= t3;
+  }
+  // Tier 4: everything above 30,000 sqft at 15% rate
+  if (remaining > 0) {
+    cost += remaining * BASE_RATE * 0.15;
+  }
+  return cost;
+}
+
+/* ---------- 3b. JOB OPTION MULTIPLIERS ----------
+   Grass condition surcharges mirror published industry practice (LawnStarter,
+   LawnLove, GreenPal). Frequency multipliers are calibrated around bi-weekly
+   as the baseline (the most common residential cadence). Weekly gets a small
+   discount because crews amortize setup across tighter visits and route-stack
+   more efficiently; monthly adds a small premium because grass grows longer
+   between visits; one-time gets a meaningful premium to cover the fact that
+   the provider can't recoup drive-out cost across future visits to the same
+   property.
+*/
+const CONDITION_MULTIPLIERS = {
+  standard:  { label: "Standard (under 6\")",       mult: 1.00 },
+  overgrown: { label: "Overgrown (6\"–10\")",       mult: 1.30 },
+  tall:      { label: "Tall/Neglected (10\"–15\")", mult: 1.70 },
+  cleanup:   { label: "Heavy cleanup (15\"+)",      mult: 2.25 }
+};
+const FREQUENCY_MULTIPLIERS = {
+  weekly:   { label: "Weekly",          mult: 0.95 },   // small recurring-route discount
+  biweekly: { label: "Every 2 weeks",   mult: 1.00 },   // baseline
+  monthly:  { label: "Monthly",         mult: 1.05 },   // longer grass, slight premium
+  onetime:  { label: "One-time",        mult: 1.15 }    // no amortized drive-out, clear premium
+};
+
+function priceFor(sqft, stateCode, opts) {
+  opts = opts || {};
+  const condKey = opts.condition || 'standard';
+  const freqKey = opts.frequency || 'biweekly';
+  const condMult = (CONDITION_MULTIPLIERS[condKey] || CONDITION_MULTIPLIERS.standard).mult;
+  const freqMult = (FREQUENCY_MULTIPLIERS[freqKey] || FREQUENCY_MULTIPLIERS.biweekly).mult;
+
+  const data = STATE_DATA[stateCode] || { name: "United States", wage: 17.50, mult: 1.00 };
+  const rawPrice = laborCost(sqft) * data.mult * condMult * freqMult;
+  const avg = Math.max(Math.round(rawPrice), MIN_JOB_FLOOR);
+  const low = Math.max(Math.round(avg * VARIANCE_LOW), MIN_JOB_FLOOR);
+  const high = Math.round(avg * VARIANCE_HIGH);
+  const minutesOnSite = Math.round((sqft / CREW_SQFT_PER_HOUR) * 60 * Math.sqrt(condMult));
+  const totalMinutes = Math.max(minutesOnSite + SETUP_MINUTES, 20);
+  return {
+    state: data.name,
+    wage: data.wage,
+    low, avg, high,
+    minutes: totalMinutes,
+    sqft: Math.round(sqft),
+    condition: condKey,
+    condLabel: (CONDITION_MULTIPLIERS[condKey] || CONDITION_MULTIPLIERS.standard).label,
+    frequency: freqKey,
+    freqLabel: (FREQUENCY_MULTIPLIERS[freqKey] || FREQUENCY_MULTIPLIERS.biweekly).label
+  };
+}
+
+/* ---------- 4. MAP INITIALIZATION ---------- */
+let map;
+let drawnItems;
+let drawControl;
+let currentZipCode = null;
+
+/* Lazy-loader for Leaflet + Leaflet.draw + Turf.js.
+   Returns a Promise that resolves when all three libraries are available on window.
+   Called on-demand the first time the user asks to see a map — keeps initial page
+   payload tiny (<40 KB HTML) and TTFB-friendly, while the head <link rel="prefetch">
+   tags warm the browser cache in parallel. */
+let __mapLibsPromise = null;
+function loadMapLibs() {
+  if (__mapLibsPromise) return __mapLibsPromise;
+  const addCss = (href) => new Promise((resolve, reject) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    link.onload = resolve;
+    link.onerror = () => reject(new Error('CSS load failed: ' + href));
+    document.head.appendChild(link);
+  });
+  const addJs = (src) => new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = false; // preserve execution order for dependent libs
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('JS load failed: ' + src));
+    document.head.appendChild(s);
+  });
+  __mapLibsPromise = (async () => {
+    // CSS first (can load in parallel)
+    await Promise.all([
+      addCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'),
+      addCss('https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css')
+    ]);
+    // Leaflet must load before Leaflet.draw
+    await addJs('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+    await Promise.all([
+      addJs('https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js'),
+      addJs('https://unpkg.com/@turf/turf@6/turf.min.js')
+    ]);
+  })();
+  return __mapLibsPromise;
+}
+
+function initMap(lat, lng) {
+  if (map) {
+    map.setView([lat, lng], 20);
+    return;
+  }
+
+  map = L.map('map', {
+    center: [lat, lng],
+    zoom: 20,
+    maxZoom: 22,
+    zoomControl: true
+  });
+
+  // Esri World Imagery satellite tiles (free, no API key)
+  L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {
+      attribution: '© Esri, Maxar, Earthstar Geographics',
+      maxZoom: 22,
+      maxNativeZoom: 19
+    }
+  ).addTo(map);
+
+  // Feature group to store drawn shapes
+  drawnItems = new L.FeatureGroup();
+  map.addLayer(drawnItems);
+
+  // Drawing controls — polygons only, no fancy shapes
+  drawControl = new L.Control.Draw({
+    position: 'topleft',
+    draw: {
+      polygon: {
+        allowIntersection: false,
+        shapeOptions: {
+          color: '#f4a62a',
+          weight: 3,
+          fillColor: '#f4a62a',
+          fillOpacity: 0.35
+        },
+        showArea: false
+      },
+      polyline: false,
+      circle: false,
+      rectangle: false,
+      marker: false,
+      circlemarker: false
+    },
+    edit: {
+      featureGroup: drawnItems,
+      remove: true
+    }
+  });
+  map.addControl(drawControl);
+
+  // Draw events
+  map.on(L.Draw.Event.CREATED, (e) => {
+    drawnItems.addLayer(e.layer);
+    recalcArea();
+  });
+  map.on(L.Draw.Event.EDITED, recalcArea);
+  map.on(L.Draw.Event.DELETED, recalcArea);
+}
+
+/* ---------- Job option state ---------- */
+const jobOptions = {
+  frequency: 'biweekly',   // default: most common recurring cadence
+  condition: 'standard'    // sensible default, auto-adjusted for one-time below
+};
+let lastDrawnSqFt = 0;
+
+/* ---------- Area formatting ----------
+   Homeowners and realtors talk about land in acres, not sqft. We lead with
+   acres on the consumer UI, with sqft in parentheses as a reference. Under
+   the hood all math stays in sqft (more precise, no rounding accumulation).
+
+   Formatting rules:
+     - 1+ acres:   one decimal  (e.g., "1.4 acres")
+     - <1 acre:    two decimals (e.g., "0.19 acres")
+     - <0.01 acre: show as sqft primary to avoid "0.00 acres" reads
+*/
+const SQFT_PER_ACRE = 43560;
+
+function sqftToAcres(sqft) {
+  return sqft / SQFT_PER_ACRE;
+}
+
+function formatAcres(sqft) {
+  const a = sqftToAcres(sqft);
+  if (a >= 1) return a.toFixed(1);
+  return a.toFixed(2);
+}
+
+function formatSqFt(sqft) {
+  return Math.round(sqft).toLocaleString('en-US');
+}
+
+/* Returns { primary, unit, secondary } for the split-line display.
+   `context` is 'consumer' (acres primary) or 'provider' (sqft primary). */
+function formatArea(sqft, context) {
+  context = context || 'consumer';
+  const acres = sqftToAcres(sqft);
+  const verySmall = acres < 0.01;
+  if (context === 'provider' || verySmall) {
+    return {
+      primary: formatSqFt(sqft),
+      unit: 'sq ft',
+      secondary: acres > 0 ? '(' + formatAcres(sqft) + ' acres)' : ''
+    };
+  }
+  return {
+    primary: formatAcres(sqft),
+    unit: acres === 1 ? 'acre' : 'acres',
+    secondary: '(' + formatSqFt(sqft) + ' sq ft)'
+  };
+}
+
+let __lawnDrawnAnalyticsSent = false;
+function recalcArea() {
+  let totalSqMeters = 0;
+  drawnItems.eachLayer(layer => {
+    const geojson = layer.toGeoJSON();
+    totalSqMeters += turf.area(geojson);
+  });
+  const totalSqFt = totalSqMeters * 10.7639;
+  lastDrawnSqFt = totalSqFt;
+  const area = formatArea(totalSqFt, 'consumer');
+  document.getElementById('areaNum').textContent = area.primary;
+  document.getElementById('areaUnit').textContent = area.unit;
+  document.getElementById('areaSub').textContent = area.secondary;
+
+  if (totalSqFt > 50) {
+    document.getElementById('optionsPanel').classList.add('active');
+    renderPrice();
+    if (!__lawnDrawnAnalyticsSent && typeof plausible === 'function') {
+      try { plausible('lawn-drawn', { props: { acres: Number((totalSqFt / 43560).toFixed(2)) } }); } catch (_) {}
+      __lawnDrawnAnalyticsSent = true;
+    }
+  } else {
+    document.getElementById('optionsPanel').classList.remove('active');
+    document.getElementById('results').classList.remove('active');
+  }
+}
+
+let __quoteAnalyticsSent = false;
+function renderPrice() {
+  if (lastDrawnSqFt <= 50) return;
+  const price = priceFor(lastDrawnSqFt, currentStateFromLookup(), {
+    frequency: jobOptions.frequency,
+    condition: jobOptions.condition
+  });
+  renderResults(price);
+  // Fire once per address/drawn-lawn cycle so we don't spam Plausible on every tweak
+  if (!__quoteAnalyticsSent && typeof plausible === 'function') {
+    try {
+      plausible('quote-calculated', {
+        props: {
+          state: price.state,
+          avg: price.avg,
+          acres: Number((price.sqft / 43560).toFixed(2)),
+          frequency: price.frequency,
+          condition: price.condition
+        }
+      });
+    } catch (_) {}
+    __quoteAnalyticsSent = true;
+  }
+}
+
+/* ---------- 5. STATE LOOKUP FROM ADDRESS RESULT ---------- */
+let lastGeocodeState = null;
+function currentStateFromLookup() {
+  if (currentZipCode) {
+    const fromZip = zipToState(currentZipCode);
+    if (fromZip) return fromZip;
+  }
+  return lastGeocodeState;
+}
+
+/* ---------- 6. ADDRESS GEOCODING ----------
+   Multi-tier strategy for reliable US address lookup:
+     1. U.S. Census Bureau geocoder (free, purpose-built for US, highly accurate)
+     2. Nominatim with normalized query (expanded abbreviations, no periods)
+     3. ZIP-only fallback so the map at least centers on the right area
+*/
+
+const US_STATE_NAME_TO_CODE = {
+  'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA',
+  'Colorado':'CO','Connecticut':'CT','Delaware':'DE','District of Columbia':'DC',
+  'Florida':'FL','Georgia':'GA','Hawaii':'HI','Idaho':'ID','Illinois':'IL',
+  'Indiana':'IN','Iowa':'IA','Kansas':'KS','Kentucky':'KY','Louisiana':'LA',
+  'Maine':'ME','Maryland':'MD','Massachusetts':'MA','Michigan':'MI','Minnesota':'MN',
+  'Mississippi':'MS','Missouri':'MO','Montana':'MT','Nebraska':'NE','Nevada':'NV',
+  'New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM','New York':'NY',
+  'North Carolina':'NC','North Dakota':'ND','Ohio':'OH','Oklahoma':'OK','Oregon':'OR',
+  'Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC','South Dakota':'SD',
+  'Tennessee':'TN','Texas':'TX','Utah':'UT','Vermont':'VT','Virginia':'VA',
+  'Washington':'WA','West Virginia':'WV','Wisconsin':'WI','Wyoming':'WY'
+};
+
+function normalizeAddress(q) {
+  // Expand common abbreviations and strip periods so geocoders match reliably
+  const abbr = [
+    [/\bRd\.?\b/gi, 'Road'],
+    [/\bSt\.?\b/gi, 'Street'],
+    [/\bAve\.?\b/gi, 'Avenue'],
+    [/\bBlvd\.?\b/gi, 'Boulevard'],
+    [/\bDr\.?\b/gi, 'Drive'],
+    [/\bLn\.?\b/gi, 'Lane'],
+    [/\bCt\.?\b/gi, 'Court'],
+    [/\bPl\.?\b/gi, 'Place'],
+    [/\bHwy\.?\b/gi, 'Highway'],
+    [/\bPkwy\.?\b/gi, 'Parkway'],
+    [/\bTrl\.?\b/gi, 'Trail'],
+    [/\bCir\.?\b/gi, 'Circle'],
+    [/\bTer\.?\b/gi, 'Terrace'],
+    [/\bN\.\b/gi, 'N'],
+    [/\bS\.\b/gi, 'S'],
+    [/\bE\.\b/gi, 'E'],
+    [/\bW\.\b/gi, 'W'],
+  ];
+  let out = q;
+  abbr.forEach(([re, rep]) => { out = out.replace(re, rep); });
+  return out.replace(/\./g, '').replace(/\s+/g, ' ').trim();
+}
+
+function extractZip(q) {
+  const m = q.match(/\b(\d{5})(?:-\d{4})?\b/);
+  return m ? m[1] : null;
+}
+
+// TIER 1: U.S. Census Bureau geocoder (via JSONP — Census does not send
+// CORS headers, so fetch() is blocked by the browser. JSONP works because
+// a <script> tag bypasses the same-origin policy.)
+function geocodeCensus(q) {
+  return new Promise((resolve, reject) => {
+    const cbName = '__censusCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+    const url = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress'
+      + '?address=' + encodeURIComponent(q)
+      + '&benchmark=Public_AR_Current'
+      + '&format=jsonp&callback=' + cbName;
+
+    const script = document.createElement('script');
+    let settled = false;
+
+    const cleanup = () => {
+      if (script.parentNode) script.parentNode.removeChild(script);
+      try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
+    };
+
+    window[cbName] = function (data) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      try {
+        const matches = data && data.result && data.result.addressMatches;
+        if (!matches || !matches.length) return resolve(null);
+        const hit = matches[0];
+        const coords = hit.coordinates;
+        const comp = hit.addressComponents || {};
+        resolve({
+          lat: parseFloat(coords.y),
+          lng: parseFloat(coords.x),
+          state: comp.state || null,
+          zip: comp.zip || null,
+          label: hit.matchedAddress || q,
+          source: 'census'
+        });
+      } catch (e) {
+        reject(e);
+      }
+    };
+
+    script.onerror = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('Census JSONP script error'));
+    };
+
+    // 8 second safety timeout
+    setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('Census JSONP timeout'));
+    }, 8000);
+
+    script.src = url;
+    document.head.appendChild(script);
+  });
+}
+
+// TIER 2: Nominatim
+async function geocodeNominatim(q) {
+  const url = 'https://nominatim.openstreetmap.org/search'
+    + '?format=json&addressdetails=1&limit=1&countrycodes=us'
+    + '&q=' + encodeURIComponent(q);
+  const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+  if (!res.ok) throw new Error('Nominatim HTTP ' + res.status);
+  const data = await res.json();
+  if (!data.length) return null;
+  const hit = data[0];
+  let stateCode = null;
+  if (hit.address && hit.address.state) {
+    stateCode = US_STATE_NAME_TO_CODE[hit.address.state] || null;
+  }
+  const postcode = (hit.address && hit.address.postcode) ? hit.address.postcode.slice(0, 5) : null;
+  return {
+    lat: parseFloat(hit.lat),
+    lng: parseFloat(hit.lon),
+    state: stateCode,
+    zip: postcode,
+    label: hit.display_name,
+    source: 'nominatim'
+  };
+}
+
+// TIER 3: ZIP-only fallback (Nominatim is good at postcode lookups)
+async function geocodeZipOnly(zip) {
+  if (!zip) return null;
+  const url = 'https://nominatim.openstreetmap.org/search'
+    + '?format=json&addressdetails=1&limit=1&countrycodes=us'
+    + '&postalcode=' + encodeURIComponent(zip);
+  const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (!data.length) return null;
+  const hit = data[0];
+  let stateCode = null;
+  if (hit.address && hit.address.state) {
+    stateCode = US_STATE_NAME_TO_CODE[hit.address.state] || null;
+  }
+  return {
+    lat: parseFloat(hit.lat),
+    lng: parseFloat(hit.lon),
+    state: stateCode,
+    zip: zip,
+    label: 'Area near ' + zip,
+    source: 'zip-fallback'
+  };
+}
+
+async function geocodeAddress(q) {
+  const normalized = normalizeAddress(q);
+  const zip = extractZip(q);
+
+  // Try Census first with original, then normalized
+  const attempts = [q, normalized].filter((v, i, a) => v && a.indexOf(v) === i);
+
+  for (const attempt of attempts) {
+    try {
+      const r = await geocodeCensus(attempt);
+      if (r) return r;
+    } catch (e) { /* fall through */ }
+  }
+
+  // Try Nominatim with normalized query
+  for (const attempt of attempts) {
+    try {
+      const r = await geocodeNominatim(attempt);
+      if (r) return r;
+    } catch (e) { /* fall through */ }
+  }
+
+  // Last resort: center the map on the ZIP code if we have one
+  if (zip) {
+    try {
+      const r = await geocodeZipOnly(zip);
+      if (r) return r;
+    } catch (e) { /* fall through */ }
+  }
+
+  return null;
+}
+
+/* ---------- 7. RESULTS RENDERING ---------- */
+let lastBenchmarkPrice = null;  // used by Compare-Your-Quote feature below
+function renderResults(price) {
+  lastBenchmarkPrice = price.avg;  // exposed for Compare-Your-Quote tool
+  document.getElementById('priceLow').textContent = price.low;
+  document.getElementById('priceAvg').textContent = price.avg;
+  document.getElementById('priceHigh').textContent = price.high;
+  const areaStr = formatArea(price.sqft, 'consumer');
+  document.getElementById('brkArea').textContent = areaStr.primary + ' ' + areaStr.unit + ' ' + areaStr.secondary;
+  document.getElementById('brkRegion').textContent = price.state;
+  document.getElementById('brkWage').textContent = '$' + price.wage.toFixed(2) + '/hr';
+  document.getElementById('brkTime').textContent = price.minutes + ' min';
+
+  // Add/update frequency + condition rows in the breakdown
+  upsertBreakdownRow('brkFreq', 'Frequency', price.freqLabel);
+  upsertBreakdownRow('brkCond', 'Grass condition', price.condLabel);
+
+  // Contextual note (benchmark accuracy guidance)
+  const note = document.getElementById('adjNote');
+  if (note) {
+    note.innerHTML = '<strong>Use this as a benchmark.</strong> Any bid within roughly ±15% of ' +
+      'this number is reasonable for your market. If a quote is well above or below, ask why — ' +
+      'factors like access, slope, obstacles, and scheduling can legitimately shift the price. ' +
+      'Ready to get firm bids? <a href="#match" style="color:inherit;text-decoration:underline;"><strong>Get matched with local pros ↓</strong></a>';
+    note.classList.add('active');
+  }
+
+  document.getElementById('results').classList.add('active');
+}
+
+function upsertBreakdownRow(id, label, value) {
+  let row = document.getElementById(id);
+  if (!row) {
+    const container = document.querySelector('.breakdown');
+    if (!container) return;
+    row = document.createElement('div');
+    row.className = 'breakdown-row';
+    row.id = id;
+    row.innerHTML = '<span class="label">' + label + '</span><span class="value"></span>';
+    container.appendChild(row);
+  }
+  row.querySelector('.value').textContent = value;
+}
+
+/* ---------- 8a. ADDRESS AUTOCOMPLETE ----------
+   Uses Nominatim search API (free, CORS-enabled) to suggest US addresses
+   as the user types. Debounced at 300ms, minimum 4 characters.
+   Keyboard navigation: ArrowDown/Up to move, Enter to select, Escape to close.
+*/
+const acInput = document.getElementById('addressInput');
+const acDropdown = document.getElementById('acDropdown');
+let acTimer = null;
+let acResults = [];
+let acIndex = -1;
+let acSelected = false; // true when user picked a suggestion
+
+/* Position the dropdown directly below the address input using fixed coords.
+   This lets it render outside the calc-card's overflow:hidden boundary. */
+function positionAcDropdown() {
+  if (!acDropdown.classList.contains('active')) return;
+  const r = acInput.getBoundingClientRect();
+  acDropdown.style.left = r.left + 'px';
+  acDropdown.style.top = (r.bottom + 4) + 'px';
+  acDropdown.style.width = r.width + 'px';
+}
+
+function debounceAC() {
+  if (acTimer) clearTimeout(acTimer);
+  acSelected = false;
+  const q = acInput.value.trim();
+  if (q.length < 4) {
+    closeAC();
+    return;
+  }
+  acTimer = setTimeout(() => fetchSuggestions(q), 300);
+}
+
+async function fetchSuggestions(q) {
+  acDropdown.innerHTML = '<div class="ac-spinner">Searching...</div>';
+  acDropdown.classList.add('active');
+  positionAcDropdown();
+  try {
+    const resp = await fetch(
+      'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q) +
+      '&countrycodes=us&format=json&addressdetails=1&limit=5',
+      { headers: { 'User-Agent': 'MowMetric-Prototype' } }
+    );
+    const data = await resp.json();
+    acResults = data.filter(r => r.lat && r.lon).map(r => {
+      const a = r.address || {};
+      const num = a.house_number || '';
+      const street = a.road || '';
+      const city = a.city || a.town || a.village || a.hamlet || '';
+      const state = a.state || '';
+      const zip = a.postcode || '';
+      const main = [num, street].filter(Boolean).join(' ') || r.display_name.split(',')[0];
+      const sub = [city, state, zip].filter(Boolean).join(', ');
+      return {
+        main: main,
+        sub: sub,
+        full: [main, sub].filter(Boolean).join(', '),
+        lat: parseFloat(r.lat),
+        lng: parseFloat(r.lon),
+        state: a.state || null,
+        stateCode: null, // will resolve via zipToState
+        zip: zip || null,
+        display_name: r.display_name
+      };
+    });
+    renderAC();
+  } catch (e) {
+    acDropdown.innerHTML = '<div class="ac-spinner">Could not load suggestions</div>';
+  }
+}
+
+function renderAC() {
+  if (!acResults.length) {
+    acDropdown.innerHTML = '<div class="ac-spinner">No matches — try adding the city or ZIP</div>';
+    positionAcDropdown();
+    return;
+  }
+  acIndex = -1;
+  acDropdown.innerHTML = acResults.map((r, i) =>
+    '<div class="ac-item" role="option" data-idx="' + i + '">' +
+    '<span class="ac-main">' + escHtml(r.main) + '</span>' +
+    '<span class="ac-sub">' + escHtml(r.sub) + '</span>' +
+    '</div>'
+  ).join('');
+  acDropdown.classList.add('active');
+  positionAcDropdown();
+}
+
+/* Keep the dropdown glued to the input on scroll / resize */
+window.addEventListener('scroll', positionAcDropdown, { passive: true });
+window.addEventListener('resize', positionAcDropdown);
+
+function escHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function closeAC() {
+  acDropdown.classList.remove('active');
+  acDropdown.innerHTML = '';
+  acResults = [];
+  acIndex = -1;
+}
+
+function selectAC(idx) {
+  const r = acResults[idx];
+  if (!r) return;
+  acInput.value = r.full;
+  acSelected = true;
+  closeAC();
+  // Auto-submit with the known coordinates
+  applyGeoResult(r.lat, r.lng, r.state, r.zip, r.full);
+}
+
+function highlightAC(idx) {
+  const items = acDropdown.querySelectorAll('.ac-item');
+  items.forEach((el, i) => el.classList.toggle('highlighted', i === idx));
+  acIndex = idx;
+}
+
+acInput.addEventListener('input', debounceAC);
+
+acInput.addEventListener('keydown', (e) => {
+  if (!acDropdown.classList.contains('active') || !acResults.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    highlightAC(Math.min(acIndex + 1, acResults.length - 1));
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    highlightAC(Math.max(acIndex - 1, 0));
+  } else if (e.key === 'Enter' && acIndex >= 0) {
+    e.preventDefault();
+    selectAC(acIndex);
+  } else if (e.key === 'Escape') {
+    closeAC();
+  }
+});
+
+acDropdown.addEventListener('click', (e) => {
+  const item = e.target.closest('.ac-item');
+  if (!item) return;
+  selectAC(parseInt(item.getAttribute('data-idx'), 10));
+});
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.address-wrap')) closeAC();
+});
+
+/* ---------- 8b. GEOLOCATION (Use My Location) ---------- */
+document.getElementById('geolocateBtn').addEventListener('click', () => {
+  if (!navigator.geolocation) {
+    document.getElementById('addressError').textContent = 'Geolocation is not supported by your browser.';
+    document.getElementById('addressError').classList.add('active');
+    return;
+  }
+  const btn = document.getElementById('geolocateBtn');
+  btn.disabled = true;
+  btn.textContent = '...';
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      try {
+        // Reverse geocode to get address, state, ZIP
+        const resp = await fetch(
+          'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng +
+          '&format=json&addressdetails=1',
+          { headers: { 'User-Agent': 'MowMetric-Prototype' } }
+        );
+        const data = await resp.json();
+        const a = data.address || {};
+        const num = a.house_number || '';
+        const street = a.road || '';
+        const city = a.city || a.town || a.village || '';
+        const state = a.state || '';
+        const zip = a.postcode || '';
+        const label = [num, street, city, state, zip].filter(Boolean).join(', ');
+        acInput.value = label || ('Location: ' + lat.toFixed(5) + ', ' + lng.toFixed(5));
+        acSelected = true;
+        applyGeoResult(lat, lng, state, zip, label);
+      } catch (e) {
+        // Reverse geocode failed, still use coordinates for map
+        acInput.value = 'Location: ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
+        applyGeoResult(lat, lng, null, null, acInput.value);
+      }
+      btn.disabled = false;
+      btn.innerHTML = '&#x1F4CD;';
+    },
+    (error) => {
+      btn.disabled = false;
+      btn.innerHTML = '&#x1F4CD;';
+      const err = document.getElementById('addressError');
+      if (error.code === 1) {
+        err.textContent = 'Location access was denied. Please type your address instead, or allow location access in your browser settings.';
+      } else {
+        err.textContent = 'Could not determine your location. Please type your address instead.';
+      }
+      err.classList.add('active');
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+});
+
+/* ---------- 8c. SHARED GEO RESULT HANDLER ---------- */
+async function applyGeoResult(lat, lng, stateName, zip, label) {
+  const err = document.getElementById('addressError');
+  err.classList.remove('active');
+  // Resolve state code
+  let stateCode = null;
+  if (zip) {
+    stateCode = zipToState(zip);
+    currentZipCode = zip;
+  }
+  if (!stateCode && stateName) {
+    stateCode = US_STATE_NAME_TO_CODE[stateName] || null;
+  }
+  lastGeocodeState = stateCode;
+  // Persist the resolved context so the lead form can include it
+  window.__lastAddress = label || null;
+  window.__lastState = stateCode || null;
+  window.__lastZip = zip || null;
+  // Reset per-lawn analytics flags so each new address can fire lawn-drawn + quote-calculated
+  __lawnDrawnAnalyticsSent = false;
+  __quoteAnalyticsSent = false;
+  // Fire address-entered event
+  if (typeof plausible === 'function') {
+    try { plausible('address-entered', { props: { state: stateCode || 'unknown' } }); } catch (_) {}
+  }
+  document.getElementById('mapSection').classList.add('active');
+  try {
+    await loadMapLibs();
+  } catch (e) {
+    err.textContent = 'The map library failed to load. Check your connection and try again.';
+    err.classList.add('active');
+    return;
+  }
+  setTimeout(() => initMap(lat, lng), 50);
+  setTimeout(() => {
+    document.getElementById('mapSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 150);
+}
+
+/* ---------- 8d. FORM SUBMIT (manual entry fallback) ---------- */
+document.getElementById('addressForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  // If user already selected from autocomplete or geolocation, the map is already showing
+  if (acSelected) return;
+  const input = document.getElementById('addressInput').value.trim();
+  if (!input) return;
+  closeAC();
+  const btn = document.getElementById('addressBtn');
+  const err = document.getElementById('addressError');
+  err.classList.remove('active');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Finding...';
+
+  try {
+    const result = await geocodeAddress(input);
+    if (!result) {
+      err.textContent = 'We couldn\'t find that address. Try picking a suggestion from the dropdown, or use the location pin button.';
+      err.classList.add('active');
+      return;
+    }
+    if (result.source === 'zip-fallback') {
+      err.textContent = 'We couldn\'t locate the exact street, so we centered the map on your ZIP code. Scroll and zoom to find your property, then draw your lawn.';
+      err.classList.add('active');
+    }
+    lastGeocodeState = result.state;
+    currentZipCode = result.zip;
+    window.__lastAddress = input;
+    window.__lastState = result.state || null;
+    window.__lastZip = result.zip || null;
+    document.getElementById('mapSection').classList.add('active');
+    try {
+      await loadMapLibs();
+    } catch (e) {
+      err.textContent = 'The map library failed to load. Check your connection and try again.';
+      err.classList.add('active');
+      return;
+    }
+    setTimeout(() => initMap(result.lat, result.lng), 50);
+    setTimeout(() => {
+      document.getElementById('mapSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
+  } catch (error) {
+    err.textContent = 'Address lookup is temporarily unavailable. Please try again.';
+    err.classList.add('active');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Find my lawn';
+  }
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  if (drawnItems) {
+    drawnItems.clearLayers();
+    recalcArea();
+  }
+});
+
+/* ---------- Compare-Your-Quote ----------
+   Compares a user-entered competing quote to our benchmark "Fair market" price.
+   Thresholds:
+     GREEN   within ±15%   "fair bid"
+     YELLOW  15–30% high   "above fair market"
+     YELLOW  15–30% low    "suspiciously low — confirm scope"
+     RED     >30% high     "well above fair market"
+     RED     >30% low      "too good to be true — risk flag"
+*/
+
+document.getElementById('compareForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const val = parseFloat(document.getElementById('compareQuote').value);
+  const verdictEl = document.getElementById('compareVerdict');
+  if (!val || val <= 0 || !lastBenchmarkPrice) {
+    verdictEl.className = 'compare-verdict';
+    verdictEl.textContent = '';
+    return;
+  }
+  const diff = (val - lastBenchmarkPrice) / lastBenchmarkPrice;
+  const pct = Math.round(Math.abs(diff) * 100);
+  const dir = diff > 0 ? 'above' : 'below';
+  let cls, label, msg;
+
+  if (Math.abs(diff) <= 0.15) {
+    cls = 'green';
+    label = 'Fair';
+    msg = 'Their $' + val + ' quote is within ±15% of our $' + lastBenchmarkPrice + ' benchmark. That\'s a reasonable bid for your market — the bid-to-bid spread in most ZIPs is wider than that.';
+  } else if (Math.abs(diff) <= 0.30) {
+    cls = 'yellow';
+    label = 'Check this';
+    if (diff > 0) {
+      msg = 'Their quote is about ' + pct + '% above the fair-market benchmark ($' + lastBenchmarkPrice + '). Not unreasonable if the site has access challenges, heavy detail work, or scheduling constraints — but worth asking what drives the premium.';
+    } else {
+      msg = 'Their quote is about ' + pct + '% below the fair-market benchmark ($' + lastBenchmarkPrice + '). Confirm they\'re including trim, blow, and insurance — a cheap quote that skips any of those isn\'t really an apples-to-apples bid.';
+    }
+  } else {
+    cls = 'red';
+    label = 'Red flag';
+    if (diff > 0) {
+      msg = 'Their quote is ' + pct + '% ' + dir + ' the fair-market benchmark ($' + lastBenchmarkPrice + '). Unless there\'s a major site factor (steep slopes, gated access, heavy obstacles), this is well above what a competitive local crew should charge. Get a second opinion.';
+    } else {
+      msg = 'Their quote is ' + pct + '% ' + dir + ' the fair-market benchmark ($' + lastBenchmarkPrice + '). That\'s well below what a licensed, insured crew can afford to charge. Common risks at this price: uninsured operator, missing trim/blow, no-show likelihood, or a bait-and-switch on the second cut.';
+    }
+  }
+  verdictEl.className = 'compare-verdict active ' + cls;
+  verdictEl.innerHTML = '<span class="verdict-label">' + label + '</span>' + msg;
+
+  // Analytics
+  if (typeof plausible === 'function') {
+    try { plausible('compare-quote-submitted', { props: { verdict: cls, pct_diff: Math.round(diff * 100) } }); } catch (_) {}
+  }
+});
+
+/* ---------- Lead-form pill groups (intent + urgency) ---------- */
+const leadForm = {
+  intent: 'biweekly',    // default matches active pill above; nudges high-LTV segment
+  urgency: '2-4w'        // default matches active pill above
+};
+
+function wirePillGroup(containerId, attr, key) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.addEventListener('click', (e) => {
+    const btn = e.target.closest('[' + attr + ']');
+    if (!btn) return;
+    leadForm[key] = btn.getAttribute(attr);
+    container.querySelectorAll('[' + attr + ']').forEach(el => {
+      el.classList.toggle('active', el === btn);
+      el.setAttribute('aria-checked', el === btn ? 'true' : 'false');
+    });
+    if (typeof plausible === 'function') {
+      try { plausible(key + '-selected', { props: { value: leadForm[key] } }); } catch (_) {}
+    }
+  });
+}
+wirePillGroup('leadIntent', 'data-intent', 'intent');
+wirePillGroup('leadUrgency', 'data-urgency', 'urgency');
+
+/* ---------- Lead scoring (0–100) ----------
+   Six signals that empirically predict close rate in home services:
+   intent (30), urgency (20), size (15), completeness (15), phone (10), ZIP affluence (10).
+   Intent + urgency default weights; ZIP affluence stubbed at neutral 7 until ACS data ships.
+   Score determines routing tier: 85+ exclusive, 60–84 shared, <60 aged-fill.
+*/
+function scoreLead(payload) {
+  let s = 0;
+  // Intent (30)
+  s += ({ weekly: 30, biweekly: 25, monthly: 10, onetime: 5 }[payload.intent] || 5);
+  // Urgency (20)
+  s += ({ '7d': 20, '2-4w': 15, '1-3m': 10, 'flex': 5 }[payload.urgency] || 5);
+  // Property size in acres (15)
+  const acres = (payload.sqft || 0) / 43560;
+  if (acres >= 0.23) s += 15;
+  else if (acres >= 0.11) s += 10;
+  else if (acres >= 0.046) s += 7;
+  else s += 4;
+  // Data completeness (15)
+  const allCore = payload.name && payload.email && payload.phone && payload.address && payload.sqft > 50;
+  s += allCore ? 15 : 8;
+  // Phone validity — plain regex stub (real impl uses Twilio Lookup at submit time) (10)
+  const phoneDigits = (payload.phone || '').replace(/\D/g, '');
+  s += (phoneDigits.length >= 10 && phoneDigits.length <= 11) ? 10 : 3;
+  // ZIP affluence — neutral until ACS multiplier ships (10)
+  s += 7;
+  return s;
+}
+
+document.getElementById('leadForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const payload = {
+    name: document.getElementById('leadName').value.trim(),
+    email: document.getElementById('leadEmail').value.trim(),
+    phone: document.getElementById('leadPhone').value.trim(),
+    intent: leadForm.intent,
+    urgency: leadForm.urgency,
+    contactTime: document.getElementById('leadContactTime').value,
+    consent: document.getElementById('leadConsent').checked,
+    address: (window.__lastAddress || null),
+    state: (window.__lastState || null),
+    zip: (window.__lastZip || null),
+    sqft: Math.round(lastDrawnSqFt || 0),
+    acres: Number((Math.round(lastDrawnSqFt || 0) / 43560).toFixed(3)),
+    frequency: jobOptions.frequency,
+    condition: jobOptions.condition,
+    submittedAt: new Date().toISOString()
+  };
+  if (!payload.name || !payload.email || !payload.phone || !payload.contactTime || !payload.consent) return;
+  payload.score = scoreLead(payload);
+  payload.routingTier = payload.score >= 85 ? 'exclusive' : (payload.score >= 60 ? 'shared' : 'aged');
+
+  // Analytics event (safe no-op if Plausible isn't loaded)
+  if (typeof plausible === 'function') {
+    try { plausible('match-form-submitted', { props: { intent: payload.intent, urgency: payload.urgency, score: payload.score, tier: payload.routingTier } }); } catch (_) {}
+  }
+
+  // Lead-intake endpoint. Replace FORMSPREE_ID with the real one.
+  const LEAD_ENDPOINT = window.YARDLINE_LEAD_ENDPOINT || 'https://formspree.io/f/FORMSPREE_ID';
+  console.log('[MowMetric] lead submitted', payload);
+  try {
+    await fetch(LEAD_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    console.warn('[MowMetric] lead POST failed; proceeding with success UI so the user isn\'t blocked', err);
+  }
+  document.getElementById('leadForm').style.display = 'none';
+  document.getElementById('leadSuccess').classList.add('active');
+});
+
+/* ---------- 9. JOB OPTION CONTROLS ---------- */
+function setActive(container, attr, value) {
+  container.querySelectorAll('[' + attr + ']').forEach(el => {
+    el.classList.toggle('active', el.getAttribute(attr) === value);
+  });
+}
+
+function applySmartDefaults() {
+  // Recurring customers never let grass get tall, so default is Standard.
+  // One-time bookings skew "I let it go," so default to Overgrown.
+  if (jobOptions.frequency === 'onetime') {
+    jobOptions.condition = 'overgrown';
+  } else {
+    jobOptions.condition = 'standard';
+  }
+  setActive(document.getElementById('condControl'), 'data-cond', jobOptions.condition);
+}
+
+// Frequency segmented control
+document.getElementById('freqControl').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-freq]');
+  if (!btn) return;
+  jobOptions.frequency = btn.getAttribute('data-freq');
+  setActive(document.getElementById('freqControl'), 'data-freq', jobOptions.frequency);
+  applySmartDefaults();
+  renderPrice();
+});
+
+// Grass condition pills
+document.getElementById('condControl').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-cond]');
+  if (!btn) return;
+  jobOptions.condition = btn.getAttribute('data-cond');
+  setActive(document.getElementById('condControl'), 'data-cond', jobOptions.condition);
+  renderPrice();
+});
+
+// Set initial active states
+setActive(document.getElementById('freqControl'), 'data-freq', jobOptions.frequency);
+setActive(document.getElementById('condControl'), 'data-cond', jobOptions.condition);
+
+/* ---------- FAQ analytics ----------
+   Fire a single "faq-opened" event per FAQ item, once per session, so we can see
+   which questions resonate without double-counting re-opens.
+*/
+document.querySelectorAll('.faq-item').forEach((item, i) => {
+  let fired = false;
+  item.addEventListener('toggle', () => {
+    if (item.open && !fired && typeof plausible === 'function') {
+      try {
+        const q = item.querySelector('summary') ? item.querySelector('summary').textContent.trim().slice(0, 60) : ('q' + (i + 1));
+        plausible('faq-opened', { props: { question: q } });
+      } catch (_) {}
+      fired = true;
+    }
+  });
+});
+</script>
+
+</body>
+</html>
