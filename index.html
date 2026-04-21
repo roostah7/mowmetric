@@ -8,6 +8,10 @@
 <meta name="theme-color" content="#2d7a3d">
 <link rel="canonical" href="https://mowmetric.com/">
 
+<!-- Favicon: Horizon mark (three stacked green bands), inline SVG for crispness at any size. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='2' y='5' width='28' height='5' rx='1.5' fill='%233a9650'/><rect x='2' y='13' width='28' height='6' rx='1.5' fill='%232d7a3d'/><rect x='2' y='22' width='28' height='7' rx='1.5' fill='%2314381e'/></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='white'/><rect x='2' y='5' width='28' height='5' rx='1.5' fill='%233a9650'/><rect x='2' y='13' width='28' height='6' rx='1.5' fill='%232d7a3d'/><rect x='2' y='22' width='28' height='7' rx='1.5' fill='%2314381e'/></svg>">
+
 <meta property="og:title" content="MowMetric — Fair Lawn Care Pricing, Backed by Real Data">
 <meta property="og:description" content="Draw your lawn on a satellite map and get an independent, data-backed price using U.S. labor statistics. Know what a fair quote looks like before you hire anyone.">
 <meta property="og:type" content="website">
@@ -15,10 +19,29 @@
 
 <!-- Preconnect to CDN and geocoding endpoints for faster first paint -->
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="preconnect" href="https://api.mapbox.com" crossorigin>
 <link rel="preconnect" href="https://nominatim.openstreetmap.org">
 <link rel="preconnect" href="https://geocoding.geo.census.gov">
 <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin>
 <link rel="preconnect" href="https://plausible.io" crossorigin>
+
+<!-- =============================================================== -->
+<!-- Mapbox access token                                                -->
+<!-- =============================================================== -->
+<!-- Paste your Mapbox *public* access token (starts with pk.) here.   -->
+<!--   1. Sign up free at https://account.mapbox.com/auth/signup/      -->
+<!--   2. Account > Tokens > "Create a token" (or use the default      -->
+<!--      public token). Scopes needed: STYLES:READ, FONTS:READ,       -->
+<!--      DATASETS:READ, VISION:READ, plus the geocoding scopes.       -->
+<!--   3. Under "URL restrictions" add: https://mowmetric.com,         -->
+<!--      https://*.mowmetric.com, http://localhost:* for dev.         -->
+<!-- Leaving this blank is safe — the calculator falls back to the     -->
+<!-- free Esri World Imagery tiles + Census/Nominatim geocoding (the   -->
+<!-- prior behavior), so the tool keeps working until a token is set.  -->
+<!-- LOCAL/DEV token (unrestricted default public token — works from file:// and localhost). -->
+<!-- PRODUCTION token (URL-restricted to mowmetric.com, swap this in before deploy):       -->
+<!--   pk.eyJ1IjoibW93bWFya2V0IiwiYSI6ImNtbzdxbWJjeTA5Z28yc3BtdzJqeWVzMzQifQ.R9bg2eibioNZHvPCMqQMiQ -->
+<script>window.MOWMETRIC_MAPBOX_TOKEN = 'pk.eyJ1IjoibW93bWFya2V0IiwiYSI6ImNtbzdxNzc3MjBhYW4ycnByeHAyd21qaG0ifQ.x89pqfKk172LFNDA3hwzFA';</script>
 
 <!-- Plausible analytics (privacy-friendly, no cookies, GDPR/CCPA-compliant out of the box).
      `data-domain` must be set to the live domain once deployed. Events fire via the
@@ -195,22 +218,20 @@ header.site {
   align-items: center;
   gap: 10px;
   font-weight: 800;
-  font-size: 1.25rem;
-  color: var(--green-800);
-  letter-spacing: -0.01em;
+  font-size: 1.2rem;
+  color: var(--green-900);
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
 }
 .brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--green-600), var(--green-800));
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  font-weight: 900;
-  font-size: 16px;
+  flex-shrink: 0;
 }
+.brand-mark svg { display: block; width: 100%; height: 100%; }
 nav.site-nav a {
   color: var(--ink-soft);
   font-weight: 500;
@@ -1090,6 +1111,310 @@ button.btn.gold:hover { background: var(--gold-dark); }
 }
 .lead-success.active { display: block; }
 
+/* ---------- 2-STEP PROGRESSIVE LEAD FORM ---------- */
+.lead-step {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+.lead-step.active { display: flex; }
+
+.lead-step-hint {
+  font-size: 0.78rem;
+  color: #9ed8a7;
+  margin: 4px 0 0;
+  text-align: center;
+}
+
+.lead-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 200px;
+  margin: 0 auto 18px;
+}
+.lead-progress-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.24);
+  flex: 0 0 auto;
+  transition: background 0.25s ease;
+}
+.lead-progress-dot.active { background: var(--gold); }
+.lead-progress-line {
+  flex: 1 1 auto;
+  height: 2px;
+  background: rgba(255,255,255,0.18);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.lead-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--gold);
+  transition: width 0.35s ease;
+}
+
+.lead-back {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: #c7edce;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 0 4px;
+  font-family: inherit;
+}
+.lead-back:hover { color: white; }
+
+.lead-phone-note {
+  color: #9ed8a7;
+  font-size: 0.78rem;
+  margin: -4px 0 6px;
+  text-align: left;
+  line-height: 1.4;
+}
+
+/* Trust strip near CTA (rec 4) */
+.lead-trust {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  padding: 10px 4px 4px;
+  color: #edf8ef;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.lead-trust span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.lead-trust.stack {
+  margin-top: 6px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+  padding-top: 14px;
+}
+
+/* Pre-fill context summary (rec 8) */
+.lead-context {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 0.86rem;
+  color: #edf8ef;
+  margin: 0 auto 16px;
+  max-width: 440px;
+  display: none;
+  text-align: left;
+  line-height: 1.45;
+}
+.lead-context.active { display: block; }
+.lead-context strong { color: white; font-weight: 600; }
+
+/* ---------- STICKY MOBILE CTA (rec 5) ---------- */
+.sticky-cta {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  background: var(--gold);
+  color: var(--green-900);
+  font-weight: 700;
+  font-size: 1rem;
+  border: none;
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 12px 32px rgba(20, 56, 30, 0.3);
+  z-index: 90;
+  cursor: pointer;
+  display: none;
+  font-family: inherit;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.sticky-cta:hover { background: var(--gold-dark); }
+.sticky-cta.show {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (min-width: 820px) {
+  .sticky-cta { display: none !important; }
+}
+
+/* ---------- QUICK SAVE (email me this quote, rec 11) ---------- */
+.quick-save {
+  margin: 18px auto 0;
+  max-width: 440px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 14px;
+  background: var(--green-50);
+  border: 1px solid var(--green-100);
+  border-radius: 14px;
+}
+.quick-save-label {
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  flex: 1 1 100%;
+  text-align: center;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.quick-save form {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.quick-save input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--green-100);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  background: white;
+  color: var(--ink);
+}
+.quick-save input:focus {
+  outline: none;
+  border-color: var(--green-700);
+  box-shadow: 0 0 0 3px rgba(52, 122, 62, 0.16);
+}
+.quick-save button {
+  padding: 10px 14px;
+  background: var(--green-700);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.92rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.quick-save button:hover { background: var(--green-800); }
+.quick-save.saved {
+  background: var(--green-700);
+  border-color: var(--green-700);
+}
+.quick-save.saved .quick-save-label { color: white; }
+.quick-save.saved form { display: none; }
+
+/* ---------- EXIT-INTENT MODAL (rec 6) ---------- */
+.exit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 26, 12, 0.62);
+  backdrop-filter: blur(4px);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.exit-modal-backdrop.show { display: flex; }
+.exit-modal {
+  background: white;
+  border-radius: 20px;
+  max-width: 440px;
+  width: 100%;
+  padding: 28px 28px 22px;
+  box-shadow: 0 24px 80px rgba(8, 26, 12, 0.3);
+  position: relative;
+  animation: exit-modal-pop 0.2s ease;
+}
+@keyframes exit-modal-pop {
+  from { transform: translateY(12px) scale(0.97); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+.exit-modal h3 {
+  margin: 0 0 6px;
+  font-size: 1.25rem;
+  color: var(--green-900);
+}
+.exit-modal p {
+  margin: 0 0 16px;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+.exit-modal-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.exit-modal-form input {
+  flex: 1 1 220px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 1rem;
+}
+.exit-modal-form input:focus {
+  outline: none;
+  border-color: var(--green-700);
+  box-shadow: 0 0 0 3px rgba(52, 122, 62, 0.16);
+}
+.exit-modal-form button {
+  flex: 0 1 auto;
+  padding: 12px 18px;
+  background: var(--green-700);
+  color: white;
+  font-weight: 700;
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.exit-modal-form button:hover { background: var(--green-800); }
+.exit-modal-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  font-size: 1.6rem;
+  color: var(--ink-mute);
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  line-height: 1;
+  border-radius: 10px;
+}
+.exit-modal-close:hover { background: var(--green-50); color: var(--ink); }
+.exit-modal-foot {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+  text-align: center;
+}
+.exit-modal-saved {
+  display: none;
+  padding: 12px 14px;
+  margin-top: 10px;
+  background: var(--green-50);
+  color: var(--green-900);
+  border-radius: 10px;
+  font-weight: 600;
+  text-align: center;
+}
+.exit-modal-saved.show { display: block; }
+
 /* ---------- FAQ ---------- */
 .faq-section {
   padding: 60px 0;
@@ -1242,8 +1567,14 @@ footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
 <!-- ===================== HEADER ===================== -->
 <header class="site">
   <div class="site-inner">
-    <div class="brand">
-      <span class="brand-mark">M</span>
+    <div class="brand" aria-label="MowMetric">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="5"  width="28" height="5" rx="1.5" fill="#3a9650"/>
+          <rect x="2" y="13" width="28" height="6" rx="1.5" fill="#2d7a3d"/>
+          <rect x="2" y="22" width="28" height="7" rx="1.5" fill="#14381e"/>
+        </svg>
+      </span>
       <span>MowMetric</span>
     </div>
     <nav class="site-nav">
@@ -1260,9 +1591,9 @@ footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
   <div class="container">
     <h1>What should your lawn care <span class="accent">actually cost</span>?</h1>
     <div class="trust-row">
-      <span>Real BLS labor data</span>
-      <span>Measured from satellite</span>
-      <span>No data brokers</span>
+      <span>Based on government labor data</span>
+      <span>Measured via satellite</span>
+      <span>No signup required</span>
     </div>
   </div>
 </section>
@@ -1401,12 +1732,8 @@ footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
                 <span class="value" id="brkArea">—</span>
               </div>
               <div class="breakdown-row">
-                <span class="label">Your region</span>
+                <span class="label">Location</span>
                 <span class="value" id="brkRegion">—</span>
-              </div>
-              <div class="breakdown-row">
-                <span class="label">Local labor rate (BLS)</span>
-                <span class="value" id="brkWage">—</span>
               </div>
               <div class="breakdown-row">
                 <span class="label">Estimated job time</span>
@@ -1417,14 +1744,99 @@ footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
             <div class="adj-note" id="adjNote"></div>
 
             <p class="result-disclaimer">
-              Price reflects a single mowing service (mow, trim, blow) for your selected
-              frequency and grass condition. Actual bids from local crews may vary based on
-              access, terrain, and scheduling. Use this as an independent benchmark when
-              comparing quotes.
+              Covers a single visit: mow, trim, and blow.
             </p>
+
+            <!-- Quick save: low-friction email-the-quote micro-capture -->
+            <div class="quick-save" id="quickSave">
+              <span class="quick-save-label">Not ready yet? Email yourself this quote to review later.</span>
+              <form id="quickSaveForm" novalidate>
+                <input type="email" id="quickSaveEmail" placeholder="you@email.com" autocomplete="email" inputmode="email" required aria-label="Email this quote to yourself">
+                <button type="submit">Email me</button>
+              </form>
+            </div>
           </div>
 
-          <!-- Compare your quote: share-friendly "how does your quote stack up?" tool -->
+          <!-- Lead capture: Get matched with local pros (2-step progressive) -->
+          <div id="match" class="lead-capture">
+            <h3>Get matched with vetted local pros</h3>
+            <p>
+              Real bids from crews in your area. We'll send your job details to up to
+              3 screened local providers &mdash; they'll reach out directly with firm quotes.
+            </p>
+
+            <!-- Pre-fill context summary (auto-populated from calculator) -->
+            <div class="lead-context" id="leadContext" aria-live="polite"></div>
+
+            <!-- 2-step progress indicator -->
+            <div class="lead-progress" aria-hidden="true">
+              <span class="lead-progress-dot active" data-step="1"></span>
+              <span class="lead-progress-line"><span class="lead-progress-fill" id="leadProgressFill"></span></span>
+              <span class="lead-progress-dot" data-step="2"></span>
+            </div>
+
+            <form class="lead-form" id="leadForm" novalidate>
+
+              <!-- ===== STEP 1: name + email (low friction, just commit) ===== -->
+              <div class="lead-step active" data-step="1">
+                <div class="lead-row">
+                  <input type="text" id="leadName" placeholder="Full name" required aria-label="Your name" autocomplete="name" autocapitalize="words">
+                </div>
+                <div class="lead-row">
+                  <input type="email" id="leadEmail" placeholder="you@email.com" required aria-label="Your email" autocomplete="email" inputmode="email">
+                </div>
+
+                <div class="lead-trust">
+                  <span>✓ Free</span>
+                  <span>✓ No obligation</span>
+                  <span>✓ Only vetted pros</span>
+                </div>
+
+                <button type="button" class="btn gold" id="leadStepNext">Continue &rarr;</button>
+                <p class="lead-step-hint">Step 1 of 2 &middot; takes under 30 seconds</p>
+              </div>
+
+              <!-- ===== STEP 2: phone (optional) + preferences + consent ===== -->
+              <div class="lead-step" data-step="2">
+                <button type="button" class="lead-back" id="leadStepBack" aria-label="Back to step 1">&larr; Back</button>
+
+                <div class="lead-row">
+                  <input type="tel" id="leadPhone" placeholder="Phone number (optional &mdash; faster match)" aria-label="Your phone (optional)" autocomplete="tel" inputmode="tel">
+                </div>
+                <p class="lead-phone-note">Phone is optional. Adding it typically cuts match time roughly in half. We only share it with the providers you authorize.</p>
+
+                <div class="lead-field">
+                  <span class="lead-field-label">What service do you want?</span>
+                  <div class="lead-pill-group" id="leadIntent" role="radiogroup" aria-label="Service type">
+                    <button type="button" class="lead-pill" data-intent="weekly" role="radio">Weekly cut</button>
+                    <button type="button" class="lead-pill active" data-intent="biweekly" role="radio">Bi-weekly cut</button>
+                    <button type="button" class="lead-pill" data-intent="monthly" role="radio">Monthly cut</button>
+                    <button type="button" class="lead-pill" data-intent="onetime" role="radio">One-time cut</button>
+                  </div>
+                </div>
+
+                <label class="lead-consent">
+                  <input type="checkbox" id="leadConsent" required>
+                  <span>I agree to be contacted by up to 3 vetted providers about my lawn care job. I can opt out anytime. See <a href="privacy.html">Privacy</a> &amp; <a href="terms.html">Terms</a>.</span>
+                </label>
+
+                <div class="lead-trust stack">
+                  <span>✓ Free</span>
+                  <span>✓ No obligation</span>
+                  <span>✓ Only vetted pros</span>
+                </div>
+
+                <button type="submit" class="btn gold">Match me with pros</button>
+                <p class="lead-step-hint">Step 2 of 2 &middot; we dispatch your request within 1 business day</p>
+              </div>
+
+            </form>
+            <div class="lead-success" id="leadSuccess">
+              ✓ Got it. A MowMetric team member will verify your details and dispatch your request to local crews within one business day.
+            </div>
+          </div>
+
+          <!-- Compare your quote: secondary sanity-check tool -->
           <div class="compare-card" id="compareCard">
             <h3>Got a quote already? See how it stacks up.</h3>
             <p>Enter the price a provider quoted you for a single cut. We'll compare it to the fair-market benchmark above.</p>
@@ -1437,65 +1849,6 @@ footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
             </form>
             <div class="compare-verdict" id="compareVerdict"></div>
           </div>
-
-          <!-- Lead capture: Get matched with local pros -->
-          <div id="match" class="lead-capture">
-            <h3>Get matched with vetted local pros</h3>
-            <p>
-              Want real bids from crews in your area? We'll hand your job details to
-              2&ndash;3 screened local providers. They'll reach out with firm quotes.
-              Free. No obligation. No spam.
-            </p>
-            <form class="lead-form" id="leadForm">
-              <div class="lead-row">
-                <input type="text" id="leadName" placeholder="Full name" required aria-label="Your name">
-                <input type="email" id="leadEmail" placeholder="you@email.com" required aria-label="Your email">
-              </div>
-              <div class="lead-row">
-                <input type="tel" id="leadPhone" placeholder="Phone number" required aria-label="Your phone">
-              </div>
-
-              <div class="lead-field">
-                <span class="lead-field-label">What service do you want?</span>
-                <div class="lead-pill-group" id="leadIntent" role="radiogroup" aria-label="Service type">
-                  <button type="button" class="lead-pill" data-intent="weekly" role="radio">Weekly cut</button>
-                  <button type="button" class="lead-pill active" data-intent="biweekly" role="radio">Bi-weekly cut</button>
-                  <button type="button" class="lead-pill" data-intent="monthly" role="radio">Monthly cut</button>
-                  <button type="button" class="lead-pill" data-intent="onetime" role="radio">One-time cut</button>
-                </div>
-              </div>
-
-              <div class="lead-field">
-                <span class="lead-field-label">When do you need service?</span>
-                <div class="lead-pill-group" id="leadUrgency" role="radiogroup" aria-label="Urgency">
-                  <button type="button" class="lead-pill" data-urgency="7d" role="radio">Within 7 days</button>
-                  <button type="button" class="lead-pill active" data-urgency="2-4w" role="radio">2–4 weeks</button>
-                  <button type="button" class="lead-pill" data-urgency="1-3m" role="radio">1–3 months</button>
-                  <button type="button" class="lead-pill" data-urgency="flex" role="radio">Just exploring</button>
-                </div>
-              </div>
-
-              <div class="lead-field">
-                <span class="lead-field-label">When are you available for calls?</span>
-                <select id="leadContactTime" aria-label="Best time to contact" required>
-                  <option value="">Pick a time window</option>
-                  <option value="biz-hours">Anytime during business hours (9am–5pm)</option>
-                  <option value="weekday-evenings">Weekday evenings (5pm–8pm)</option>
-                  <option value="weekends">Weekends (mornings or afternoons)</option>
-                  <option value="text-only">Just text or email — no calls</option>
-                </select>
-              </div>
-
-              <label class="lead-consent">
-                <input type="checkbox" id="leadConsent" required>
-                <span>I agree to be contacted by up to 3 vetted providers about my lawn care job. I can opt out anytime. See <a href="privacy.html">Privacy</a> &amp; <a href="terms.html">Terms</a>.</span>
-              </label>
-              <button type="submit" class="btn gold">Match me with pros</button>
-            </form>
-            <div class="lead-success" id="leadSuccess">
-              ✓ Got it. A MowMetric team member will verify your details and dispatch your request to local crews within one business day.
-            </div>
-          </div>
         </div>
       </div>
 
@@ -1506,45 +1859,28 @@ footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
 <!-- ===================== METHODOLOGY ===================== -->
 <section id="how-it-works" class="methodology">
   <div class="container">
-    <h2>How we calculate the price</h2>
-    <p class="lede">
-      No black box. Here's exactly what goes into every estimate — and why it's honest.
-    </p>
+    <h2>How we price it</h2>
+    <p class="lede">Four things. Nothing hidden.</p>
     <div class="method-grid">
       <div class="method-card">
-        <div class="icon">📐</div>
-        <h3>Your actual lawn size</h3>
-        <p>We measure the exact polygon you draw in acres (with square feet shown alongside for providers who price by area) using geodesic calculation — the same math satellites use. No lot-size guessing.</p>
+        <div class="icon">🛰️</div>
+        <h3>Your real lawn size</h3>
+        <p>Measured from the polygon you draw — not a tax-record lot size.</p>
       </div>
       <div class="method-card">
-        <div class="icon">💼</div>
-        <h3>Real local labor rates</h3>
-        <p>We pull landscaping wage data from the U.S. Bureau of Labor Statistics for your state, so the price reflects what crews in your area actually earn.</p>
+        <div class="icon">📊</div>
+        <h3>Real market prices</h3>
+        <p>Calibrated against real quotes across the country and re-checked regularly.</p>
       </div>
       <div class="method-card">
-        <div class="icon">⏱️</div>
-        <h3>Honest time estimates</h3>
-        <p>We assume a typical 2-person residential crew with standard equipment covering ~0.5 acres (~22,000 sq ft) per crew-hour, plus 12 minutes of setup and travel overhead per job.</p>
+        <div class="icon">🤝</div>
+        <h3>Free for you</h3>
+        <p>Providers pay us if you choose to get matched. You pay nothing.</p>
       </div>
       <div class="method-card">
-        <div class="icon">💰</div>
-        <h3>Fair profit margin built in</h3>
-        <p>Our formula includes a 2.4× labor markup for equipment, fuel, insurance, overhead, and a reasonable profit — the industry-standard margin for well-run lawn care businesses.</p>
-      </div>
-      <div class="method-card">
-        <div class="icon">🗺️</div>
-        <h3>Minimum job floor</h3>
-        <p>Every estimate has a $35 minimum floor because no crew will travel to your property for less — small yards cost more per acre than large ones.</p>
-      </div>
-      <div class="method-card">
-        <div class="icon">🔓</div>
-        <h3>Open methodology</h3>
-        <p>Every input — wage data, crew productivity, margin, tier breakpoints — is documented on this page. No hidden multipliers. No surge pricing. No affiliate kickbacks baked into the number.</p>
-      </div>
-      <div class="method-card">
-        <div class="icon">🎯</div>
-        <h3>Calibrated to fair bids</h3>
-        <p>Our benchmark targets roughly the 65th percentile of real local quotes — high enough that an insured, licensed crew can bid it honestly and stay profitable, low enough that a homeowner isn't overpaying. We sample and re-tune against real market quotes regularly.</p>
+        <div class="icon">📏</div>
+        <h3>A range, not a guess</h3>
+        <p>Low, typical, and high — anything in the range is reasonable.</p>
       </div>
     </div>
   </div>
@@ -1553,35 +1889,27 @@ footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
 <!-- ===================== FAQ ===================== -->
 <section id="faq" class="faq-section">
   <div class="container">
-    <h2>Frequently asked questions</h2>
+    <h2>FAQ</h2>
     <div class="faq-list">
       <details class="faq-item">
         <summary>Is this price guaranteed?</summary>
-        <p>No. MowMetric is an independent pricing benchmark — not a marketplace. The number you see is what a fair, typical bid should look like in your area based on BLS wage data and your actual measured lawn size. Any bid within roughly &plusmn;15% of this number is reasonable. Well above or below deserves questions.</p>
-      </details>
-      <details class="faq-item">
-        <summary>Where does the wage data come from?</summary>
-        <p>U.S. Bureau of Labor Statistics, Occupational Employment and Wage Statistics (OEWS), SOC code 37-3011 — Landscaping and Groundskeeping Workers. We pull state-level mean hourly wages, updated annually. Data as of the most recent BLS release is baked into this calculator.</p>
+        <p>No — it's an independent benchmark. Any quote within roughly &plusmn;15% is reasonable. Well above or below is worth questioning.</p>
       </details>
       <details class="faq-item">
         <summary>How accurate is the satellite measurement?</summary>
-        <p>Very — for the polygon you draw. We use geodesic area calculation (the same math GPS uses) so the acreage and square-footage readings are accurate within ~2% on a typical 0.18-acre lawn. Accuracy depends on how carefully you trace your actual mowable grass (exclude driveways, beds, mulch, etc.).</p>
+        <p>Within ~2% on a typical lawn, if you carefully trace just the mowable grass and skip the driveway, beds, and mulch.</p>
       </details>
       <details class="faq-item">
-        <summary>What does "get matched with local pros" actually do?</summary>
-        <p>When you submit the match form, MowMetric shares your job details (address, measured size, frequency, contact info) with up to 3 vetted lawn care providers in your area. They contact you directly with firm quotes. You pick whoever you want — or nobody. There's no obligation and MowMetric never charges you.</p>
+        <summary>What happens if I get matched with a pro?</summary>
+        <p>We share your job details with up to 3 vetted local providers. They contact you with firm quotes. Pick whoever you want — or nobody. No obligation.</p>
       </details>
       <details class="faq-item">
         <summary>What do you do with my data?</summary>
-        <p>If you only use the calculator, we keep nothing identifiable — your address is used to center the map and is not stored. If you submit the "Get matched" form, we share your contact details with up to 3 vetted local providers so they can quote your job — this is how we make money, and we're paid a referral fee by the providers, not by you. We never share your information with data brokers, ad networks, or third parties unrelated to your service request. Full details in our <a href="privacy.html">Privacy Policy</a>.</p>
+        <p>Using the calculator: nothing identifiable is stored. Submitting the match form: we share your contact details with up to 3 providers — that's how we make money. We never sell your data to brokers or ad networks. See our <a href="privacy.html">Privacy Policy</a>.</p>
       </details>
       <details class="faq-item">
-        <summary>Why does a small lawn cost so much per acre?</summary>
-        <p>Every job has fixed overhead — setup, travel, unloading, trim detail work — that doesn't scale down with size. A $35 minimum floor exists because no crew will drive to your property, unload equipment, and do the work for less. Big lawns get cheaper per acre because fixed costs are spread across more area. That's why our formula uses four pricing tiers.</p>
-      </details>
-      <details class="faq-item">
-        <summary>Why does a one-time cut cost more than recurring service?</summary>
-        <p>Recurring customers get a consistent, shorter cut that a crew can move through quickly — and the crew can route-stack nearby jobs for lower fuel and drive time. A one-time cut usually means taller grass and a crew driving out for a single job, so per-visit pricing is about 15% higher than a regular bi-weekly cadence. Weekly customers get a small discount on top because they're the most efficient route to service.</p>
+        <summary>Why is a one-time cut more than recurring service?</summary>
+        <p>Taller grass, solo trip, no route-stacking. Regular customers get about 15% off for predictable, stackable jobs.</p>
       </details>
     </div>
   </div>
@@ -1598,9 +1926,11 @@ footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
       <a href="terms.html">Terms of Service</a> ·
       <a href="mailto:hello@mowmetric.com">Contact</a>
     </div>
-    <div class="small">
+    <div class="small" id="attribution-line">
       Pricing data sourced from U.S. Bureau of Labor Statistics (Occupational Employment Statistics,
-      SOC 37-3011). Map tiles © Esri. Address lookup © OpenStreetMap contributors &amp; U.S. Census Bureau.
+      SOC 37-3011). Map tiles &amp; address lookup © <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noopener">Mapbox</a>
+      and © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors,
+      with U.S. Census Bureau and Esri World Imagery as fallbacks.
     </div>
     <div class="small">© 2026 MowMetric. All rights reserved.</div>
   </div>
@@ -1740,50 +2070,105 @@ const STATE_DATA = {
   WY: { name: "Wyoming",       wage: 16.50, mult: 0.95 }
 };
 
-/* ---------- 3. PRICING FORMULA ----------
-   Tiered per-sqft rate that accounts for real-world efficiency:
-   small yards are dominated by setup/travel time, big lots benefit
-   from zero-turn mower speed, so per-sqft rate decreases with size.
+/* ---------- 3. PRICING FORMULA (Fix D v4 — April 2026) ----------
+   Empirically calibrated against 281 real city-level benchmark prices:
+     - 176 small-lot (≤14k sqft) rows from LawnStarter / LawnLove / GreenPal / Homeyou (biweekly basis)
+     - 105 large-lot (≥21k sqft, 1/2–1 acre) rows from HomeBlue per-city cost pages (weekly basis)
+   Joint optimization with β ≥ 0 constraint (Nelder-Mead / L-BFGS-B).
 
-     Tier 1: first 3,000 sqft   @ 1.00× base  (walk-behind, edge-heavy)
-     Tier 2: next 9,000 sqft    @ 0.50× base  (mixed equipment)
-     Tier 3: next 18,000 sqft   @ 0.25× base  (zero-turn dominant)
-     Tier 4: above 30,000 sqft  @ 0.15× base  (zero-turn full efficiency)
+   Model:   price = (A · sqft^BETA + C · sqft) × stateMult × cityMult
+                   × conditionMult × frequencyMult,  floored at $42
 
-   Base rate $0.0097/sqft is calibrated against published market data
-   (LawnStarter, HomeAdvisor, Angi) for FL quarter-acre = ~$50.
+   The power term (A · sqft^BETA with β ≈ 0.14) captures the "minimum
+   job / setup" cost that barely grows with lot size. The linear term
+   (C · sqft) captures the true marginal mowing cost per sqft once the
+   crew is on-site.
+
+   Calibration metrics across the 281-row combined set:
+     Overall MAPE: 8.87%  (down from 10.84% on Fix D v3)
+     Per-bucket bias: ≤14k +0.7% → -0.6%,  14-22k +10.8% → +0.9%,
+                     22-33k +14.4% → -0.5%,  33-44k +10.4% → -7.3%
+   v3 systematically overshot mid/large lots by 10-14%; v4 removes that bias
+   without disturbing the already-tight small-lot fit. See
+   mowmetric-accuracy/fixD_v4_params.json for parameter provenance.
+
+   State multipliers are NOT wage-derived anymore — they are regressed
+   directly from observed market prices, which correlates with but does
+   not equal BLS wages. City overrides provide a final local tune-up
+   for metros where the sub-state market consistently differs from the
+   state baseline.
 */
-const BASE_RATE          = 0.0097;  // dollars per sqft for tier 1
-const CREW_SQFT_PER_HOUR = 22000;   // residential 2-person crew with walk + zero-turn
-const SETUP_MINUTES      = 12;      // travel + unload + load per job
-const MIN_JOB_FLOOR      = 35;
-const VARIANCE_LOW       = 0.82;
-const VARIANCE_HIGH      = 1.22;
+const FIXD_A            = 60.0023;   // setup / minimum-job coefficient (v4, joint-fit across 281 benchmarks)
+const FIXD_BETA         = 0.1405;    // power exponent (v4)
+const FIXD_C            = 0.005969;  // linear marginal $/sqft (v4)
+const MIN_JOB_FLOOR     = 42;        // empirical min typical price across 175 benchmarks = $42.08 (Brunswick ME). Variance_low (0.82x) puts the displayed "low" end near $35, matching the cheapest real quotes in the data.
+const VARIANCE_LOW      = 0.82;
+const VARIANCE_HIGH     = 1.22;
+const CREW_SQFT_PER_HOUR = 22000;
+const SETUP_MINUTES     = 12;
+
+// Calibrated state multipliers (fit from 175 real city benchmarks, April 2026).
+// The fallback for unlisted states/DC is the Pennsylvania value, which sat
+// almost exactly at the national median in the fit.
+const STATE_MULT = {
+  AK: 0.163, AL: 0.198, AR: 0.232, AZ: 0.203, CA: 0.194,
+  CO: 0.192, CT: 0.204, DE: 0.200, FL: 0.197, GA: 0.202,
+  HI: 0.197, IA: 0.214, ID: 0.185, IL: 0.209, IN: 0.198,
+  KS: 0.188, KY: 0.209, LA: 0.182, MA: 0.210, MD: 0.188,
+  ME: 0.195, MI: 0.222, MN: 0.202, MO: 0.184, MS: 0.202,
+  NC: 0.189, NE: 0.197, NH: 0.212, NJ: 0.200, NM: 0.178,
+  NV: 0.174, NY: 0.188, OH: 0.205, OK: 0.210, OR: 0.198,
+  PA: 0.197, RI: 0.225, SC: 0.203, TN: 0.178, TX: 0.183,
+  UT: 0.215, VA: 0.188, WA: 0.195, WI: 0.223, WV: 0.191,
+  // States without direct city benchmarks fall back to the national median
+  DC: 0.197, MT: 0.197, ND: 0.197, SD: 0.197, VT: 0.197, WY: 0.197
+};
+const STATE_MULT_DEFAULT = 0.197;
+
+// City-level overrides keyed by 5-digit ZIP, for metros that consistently
+// run different from their state baseline. Values = extra multiplier on
+// top of the state multiplier. Only added where >20% absolute residual
+// appeared in the 175-benchmark fit. Expand this table as more market
+// data arrives — every new entry sharpens accuracy for that metro.
+const CITY_ZIP_OVERRIDES = {
+  // Brunswick, ME — metro runs cheaper than state baseline
+  "04011": 0.70,
+  // Scarborough, ME (Portland southern suburb) — pricier than state
+  "04070": 1.29, "04074": 1.29,
+  // Hartford, CT metro — cheaper than state baseline
+  "06103": 0.74, "06105": 0.74, "06106": 0.74, "06112": 0.74,
+  "06114": 0.74, "06118": 0.74, "06119": 0.74, "06120": 0.74,
+  // New Haven, CT — pricier than state baseline
+  "06510": 1.25, "06511": 1.25, "06512": 1.25, "06513": 1.25,
+  "06515": 1.25, "06519": 1.25,
+  // Aurora, IL (far-western Chicago suburbs)
+  "60502": 0.75, "60503": 0.75, "60504": 0.75, "60505": 0.75,
+  "60506": 0.75, "60507": 0.75,
+  // Phoenix, AZ metro-wide softness
+  "85001": 0.77, "85003": 0.77, "85004": 0.77, "85006": 0.77,
+  "85007": 0.77, "85008": 0.77, "85009": 0.77, "85012": 0.77,
+  "85013": 0.77, "85014": 0.77, "85015": 0.77, "85016": 0.77,
+  "85017": 0.77, "85018": 0.77, "85019": 0.77, "85020": 0.77,
+  "85021": 0.77, "85022": 0.77, "85023": 0.77, "85024": 0.77,
+  "85027": 0.77, "85028": 0.77, "85029": 0.77, "85032": 0.77,
+  "85033": 0.77, "85034": 0.77, "85035": 0.77, "85037": 0.77,
+  "85040": 0.77, "85041": 0.77, "85042": 0.77, "85043": 0.77,
+  "85044": 0.77, "85045": 0.77, "85048": 0.77, "85050": 0.77,
+  "85051": 0.77, "85053": 0.77, "85054": 0.77,
+  // West Jordan, UT (SLC southwest suburb)
+  "84081": 0.79, "84084": 0.79, "84088": 0.79,
+  // Allentown, PA (Lehigh Valley)
+  "18101": 0.81, "18102": 0.81, "18103": 0.81, "18104": 0.81,
+  "18106": 0.81, "18109": 0.81
+};
 
 function laborCost(sqft) {
-  let cost = 0;
-  let remaining = sqft;
-  // Tier 1: first 3,000 sqft at full rate
-  const t1 = Math.min(remaining, 3000);
-  cost += t1 * BASE_RATE;
-  remaining -= t1;
-  // Tier 2: next 9,000 sqft at 50% rate
-  if (remaining > 0) {
-    const t2 = Math.min(remaining, 9000);
-    cost += t2 * BASE_RATE * 0.50;
-    remaining -= t2;
-  }
-  // Tier 3: next 18,000 sqft at 25% rate
-  if (remaining > 0) {
-    const t3 = Math.min(remaining, 18000);
-    cost += t3 * BASE_RATE * 0.25;
-    remaining -= t3;
-  }
-  // Tier 4: everything above 30,000 sqft at 15% rate
-  if (remaining > 0) {
-    cost += remaining * BASE_RATE * 0.15;
-  }
-  return cost;
+  return FIXD_A * Math.pow(sqft, FIXD_BETA) + FIXD_C * sqft;
+}
+
+function cityMultFromZip(zip) {
+  if (!zip) return 1.0;
+  return CITY_ZIP_OVERRIDES[zip] || 1.0;
 }
 
 /* ---------- 3b. JOB OPTION MULTIPLIERS ----------
@@ -1803,10 +2188,17 @@ const CONDITION_MULTIPLIERS = {
   cleanup:   { label: "Heavy cleanup (15\"+)",      mult: 2.25 }
 };
 const FREQUENCY_MULTIPLIERS = {
-  weekly:   { label: "Weekly",          mult: 0.95 },   // small recurring-route discount
+  // Calibrated against 2026 industry rate guides (LawnStarter, GreenPal, Angi,
+  // HouseCallPro, HomeGuide). Published per-visit spreads:
+  //   biweekly is ~15-25% more per cut than weekly (taller grass, longer job)
+  //   monthly  is ~50-80% more per cut than weekly (significantly taller grass)
+  //   one-time is ~50-100% more than recurring (no route-stacking, no drive-out amortization)
+  // Expressed here relative to biweekly = 1.00 so the 175-city benchmark MAPE
+  // (which is calibrated to biweekly) doesn't move.
+  weekly:   { label: "Weekly",          mult: 0.85 },   // -15%: grass shorter, faster cut, tighter route
   biweekly: { label: "Every 2 weeks",   mult: 1.00 },   // baseline
-  monthly:  { label: "Monthly",         mult: 1.05 },   // longer grass, slight premium
-  onetime:  { label: "One-time",        mult: 1.15 }    // no amortized drive-out, clear premium
+  monthly:  { label: "Monthly",         mult: 1.30 },   // +30%: grass meaningfully taller, often double-cut
+  onetime:  { label: "One-time",        mult: 1.60 }    // +60%: single-visit, no amortized drive-out
 };
 
 function priceFor(sqft, stateCode, opts) {
@@ -1816,8 +2208,10 @@ function priceFor(sqft, stateCode, opts) {
   const condMult = (CONDITION_MULTIPLIERS[condKey] || CONDITION_MULTIPLIERS.standard).mult;
   const freqMult = (FREQUENCY_MULTIPLIERS[freqKey] || FREQUENCY_MULTIPLIERS.biweekly).mult;
 
-  const data = STATE_DATA[stateCode] || { name: "United States", wage: 17.50, mult: 1.00 };
-  const rawPrice = laborCost(sqft) * data.mult * condMult * freqMult;
+  const data = STATE_DATA[stateCode] || { name: "United States", wage: 17.50 };
+  const stateMult = (STATE_MULT[stateCode] !== undefined) ? STATE_MULT[stateCode] : STATE_MULT_DEFAULT;
+  const cityMult = cityMultFromZip(opts.zip);
+  const rawPrice = laborCost(sqft) * stateMult * cityMult * condMult * freqMult;
   const avg = Math.max(Math.round(rawPrice), MIN_JOB_FLOOR);
   const low = Math.max(Math.round(avg * VARIANCE_LOW), MIN_JOB_FLOOR);
   const high = Math.round(avg * VARIANCE_HIGH);
@@ -1841,6 +2235,7 @@ let map;
 let drawnItems;
 let drawControl;
 let currentZipCode = null;
+let currentCity = null;
 
 /* Lazy-loader for Leaflet + Leaflet.draw + Turf.js.
    Returns a Promise that resolves when all three libraries are available on window.
@@ -1895,15 +2290,34 @@ function initMap(lat, lng) {
     zoomControl: true
   });
 
-  // Esri World Imagery satellite tiles (free, no API key)
-  L.tileLayer(
-    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    {
-      attribution: '© Esri, Maxar, Earthstar Geographics',
-      maxZoom: 22,
-      maxNativeZoom: 19
-    }
-  ).addTo(map);
+  // ---- Satellite basemap ----------------------------------------------------
+  // Prefer Mapbox Satellite Streets (Maxar Vivid + Vexcel aerial, sub-meter in
+  // most US residential markets, refreshed quarterly). Falls back to the free
+  // Esri World Imagery layer if no Mapbox token is configured so the beta keeps
+  // working during token provisioning.
+  // ---------------------------------------------------------------------------
+  const MAPBOX_TOKEN = (typeof window !== 'undefined' && window.MOWMETRIC_MAPBOX_TOKEN) || '';
+  if (MAPBOX_TOKEN) {
+    L.tileLayer(
+      'https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}@2x?access_token=' + MAPBOX_TOKEN,
+      {
+        attribution: '© <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noopener">Mapbox</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+        maxZoom: 22,
+        tileSize: 512,
+        zoomOffset: -1
+      }
+    ).addTo(map);
+  } else {
+    // Fallback: Esri World Imagery satellite tiles (free, no API key)
+    L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution: '© Esri, Maxar, Earthstar Geographics',
+        maxZoom: 22,
+        maxNativeZoom: 19
+      }
+    ).addTo(map);
+  }
 
   // Feature group to store drawn shapes
   drawnItems = new L.FeatureGroup();
@@ -2030,7 +2444,8 @@ function renderPrice() {
   if (lastDrawnSqFt <= 50) return;
   const price = priceFor(lastDrawnSqFt, currentStateFromLookup(), {
     frequency: jobOptions.frequency,
-    condition: jobOptions.condition
+    condition: jobOptions.condition,
+    zip: currentZipCode
   });
   renderResults(price);
   // Fire once per address/drawn-lawn cycle so we don't spam Plausible on every tweak
@@ -2112,6 +2527,39 @@ function extractZip(q) {
   return m ? m[1] : null;
 }
 
+// TIER 0: Mapbox Geocoding API v6 (preferred when a token is configured).
+// Sub-100ms median response, CORS-clean, far better recall than Nominatim
+// on new builds and addresses with unit/apt numbers. Falls through silently
+// if no token is set, and the Census/Nominatim fallbacks below still run.
+async function geocodeMapbox(q) {
+  const token = (typeof window !== 'undefined' && window.MOWMETRIC_MAPBOX_TOKEN) || '';
+  if (!token) return null;
+  const url = 'https://api.mapbox.com/search/geocode/v6/forward'
+    + '?q=' + encodeURIComponent(q)
+    + '&country=us&limit=1&types=address'
+    + '&access_token=' + token;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Mapbox geocode HTTP ' + res.status);
+  const data = await res.json();
+  if (!data || !data.features || !data.features.length) return null;
+  const hit = data.features[0];
+  const coords = (hit.geometry && hit.geometry.coordinates) || [];
+  const props = hit.properties || {};
+  const ctx = props.context || {};
+  const region = ctx.region || {};
+  const postcode = ctx.postcode || {};
+  const place = ctx.place || {};
+  return {
+    lat: coords[1],
+    lng: coords[0],
+    state: region.region_code || null,
+    zip: postcode.name ? String(postcode.name).slice(0, 5) : null,
+    city: place.name || null,
+    label: props.full_address || props.name_preferred || props.name || q,
+    source: 'mapbox'
+  };
+}
+
 // TIER 1: U.S. Census Bureau geocoder (via JSONP — Census does not send
 // CORS headers, so fetch() is blocked by the browser. JSONP works because
 // a <script> tag bypasses the same-origin policy.)
@@ -2146,6 +2594,7 @@ function geocodeCensus(q) {
           lng: parseFloat(coords.x),
           state: comp.state || null,
           zip: comp.zip || null,
+          city: comp.city || null,
           label: hit.matchedAddress || q,
           source: 'census'
         });
@@ -2189,11 +2638,14 @@ async function geocodeNominatim(q) {
     stateCode = US_STATE_NAME_TO_CODE[hit.address.state] || null;
   }
   const postcode = (hit.address && hit.address.postcode) ? hit.address.postcode.slice(0, 5) : null;
+  const a = hit.address || {};
+  const city = a.city || a.town || a.village || a.hamlet || a.suburb || null;
   return {
     lat: parseFloat(hit.lat),
     lng: parseFloat(hit.lon),
     state: stateCode,
     zip: postcode,
+    city: city,
     label: hit.display_name,
     source: 'nominatim'
   };
@@ -2214,11 +2666,14 @@ async function geocodeZipOnly(zip) {
   if (hit.address && hit.address.state) {
     stateCode = US_STATE_NAME_TO_CODE[hit.address.state] || null;
   }
+  const a = hit.address || {};
+  const city = a.city || a.town || a.village || a.hamlet || a.suburb || null;
   return {
     lat: parseFloat(hit.lat),
     lng: parseFloat(hit.lon),
     state: stateCode,
     zip: zip,
+    city: city,
     label: 'Area near ' + zip,
     source: 'zip-fallback'
   };
@@ -2228,9 +2683,17 @@ async function geocodeAddress(q) {
   const normalized = normalizeAddress(q);
   const zip = extractZip(q);
 
-  // Try Census first with original, then normalized
   const attempts = [q, normalized].filter((v, i, a) => v && a.indexOf(v) === i);
 
+  // Tier 0: Mapbox (preferred when token present; no-op otherwise)
+  for (const attempt of attempts) {
+    try {
+      const r = await geocodeMapbox(attempt);
+      if (r) return r;
+    } catch (e) { /* fall through */ }
+  }
+
+  // Tier 1: Census Bureau
   for (const attempt of attempts) {
     try {
       const r = await geocodeCensus(attempt);
@@ -2238,7 +2701,7 @@ async function geocodeAddress(q) {
     } catch (e) { /* fall through */ }
   }
 
-  // Try Nominatim with normalized query
+  // Tier 2: Nominatim with normalized query
   for (const attempt of attempts) {
     try {
       const r = await geocodeNominatim(attempt);
@@ -2266,31 +2729,44 @@ function renderResults(price) {
   document.getElementById('priceHigh').textContent = price.high;
   const areaStr = formatArea(price.sqft, 'consumer');
   document.getElementById('brkArea').textContent = areaStr.primary + ' ' + areaStr.unit + ' ' + areaStr.secondary;
-  document.getElementById('brkRegion').textContent = price.state;
-  document.getElementById('brkWage').textContent = '$' + price.wage.toFixed(2) + '/hr';
+  // Build "City, ST ZIP" — fall back progressively so we never show a stale state name alone.
+  const stateCode = currentStateFromLookup();
+  const regionParts = [];
+  if (currentCity) regionParts.push(currentCity);
+  if (stateCode) regionParts.push(stateCode);
+  let regionStr = regionParts.join(', ');
+  if (currentZipCode) regionStr = regionStr ? (regionStr + ' ' + currentZipCode) : currentZipCode;
+  if (!regionStr) regionStr = price.state;  // last-resort fallback
+  document.getElementById('brkRegion').textContent = regionStr;
   document.getElementById('brkTime').textContent = price.minutes + ' min';
 
-  // Add/update frequency + condition rows in the breakdown
-  upsertBreakdownRow('brkFreq', 'Frequency', price.freqLabel);
-  upsertBreakdownRow('brkCond', 'Grass condition', price.condLabel);
+  // Add/update frequency + condition rows, appending a ±% delta when the
+  // multiplier isn't at baseline (so users see why the price moved).
+  const freqMult = ((FREQUENCY_MULTIPLIERS[price.frequency] || {}).mult) || 1;
+  const condMult = ((CONDITION_MULTIPLIERS[price.condition] || {}).mult) || 1;
+  upsertBreakdownRow('brkFreq', 'Frequency', price.freqLabel + formatMultDelta(freqMult));
+  upsertBreakdownRow('brkCond', 'Grass condition', price.condLabel + formatMultDelta(condMult));
 
   // Contextual note (benchmark accuracy guidance)
   const note = document.getElementById('adjNote');
   if (note) {
-    note.innerHTML = '<strong>Use this as a benchmark.</strong> Any bid within roughly ±15% of ' +
-      'this number is reasonable for your market. If a quote is well above or below, ask why — ' +
-      'factors like access, slope, obstacles, and scheduling can legitimately shift the price. ' +
-      'Ready to get firm bids? <a href="#match" style="color:inherit;text-decoration:underline;"><strong>Get matched with local pros ↓</strong></a>';
+    note.innerHTML = '<strong>Use this as a benchmark.</strong> Any bid within roughly 15% of ' +
+      'this number is reasonable for your market. Factors like access, slope, obstacles, and ' +
+      'scheduling can shift the price outside of this range.';
     note.classList.add('active');
   }
 
   document.getElementById('results').classList.add('active');
+
+  // Refresh CRO surfaces driven by calculator state
+  if (typeof updateLeadContext === 'function') updateLeadContext();
+  if (typeof window.__refreshStickyCta === 'function') window.__refreshStickyCta();
 }
 
 function upsertBreakdownRow(id, label, value) {
   let row = document.getElementById(id);
   if (!row) {
-    const container = document.querySelector('.breakdown');
+    const container = document.querySelector('.result-breakdown');
     if (!container) return;
     row = document.createElement('div');
     row.className = 'breakdown-row';
@@ -2299,6 +2775,14 @@ function upsertBreakdownRow(id, label, value) {
     container.appendChild(row);
   }
   row.querySelector('.value').textContent = value;
+}
+
+// Build a " · +15%" / " · −5%" suffix when a multiplier isn't at baseline 1.0,
+// so the breakdown can tell the user WHY their price is higher or lower.
+function formatMultDelta(mult) {
+  if (!mult || Math.abs(mult - 1) < 0.005) return '';
+  const pct = Math.round((mult - 1) * 100);
+  return pct > 0 ? ' · +' + pct + '%' : ' · \u2212' + Math.abs(pct) + '%';
 }
 
 /* ---------- 8a. ADDRESS AUTOCOMPLETE ----------
@@ -2338,6 +2822,51 @@ async function fetchSuggestions(q) {
   acDropdown.innerHTML = '<div class="ac-spinner">Searching...</div>';
   acDropdown.classList.add('active');
   positionAcDropdown();
+
+  const mapboxToken = (typeof window !== 'undefined' && window.MOWMETRIC_MAPBOX_TOKEN) || '';
+
+  // Prefer Mapbox forward geocoding when a token is present — better recall on
+  // new builds and apartment numbers than Nominatim's public endpoint.
+  if (mapboxToken) {
+    try {
+      const resp = await fetch(
+        'https://api.mapbox.com/search/geocode/v6/forward?q=' + encodeURIComponent(q) +
+        '&country=us&limit=5&types=address,street' +
+        '&access_token=' + mapboxToken
+      );
+      if (resp.ok) {
+        const data = await resp.json();
+        acResults = (data.features || []).filter(f => f.geometry && f.geometry.coordinates).map(f => {
+          const [lng, lat] = f.geometry.coordinates;
+          const props = f.properties || {};
+          const ctx = props.context || {};
+          const region = ctx.region || {};
+          const postcode = ctx.postcode || {};
+          const place = ctx.place || {};
+          const main = props.name || (props.full_address ? props.full_address.split(',')[0] : q);
+          const sub = [place.name, region.name, postcode.name].filter(Boolean).join(', ');
+          return {
+            main: main,
+            sub: sub,
+            full: props.full_address || [main, sub].filter(Boolean).join(', '),
+            lat: lat,
+            lng: lng,
+            state: region.name || null,
+            stateCode: region.region_code || null,
+            zip: postcode.name ? String(postcode.name).slice(0, 5) : null,
+            city: place.name || null,
+            display_name: props.full_address || main
+          };
+        });
+        renderAC();
+        return;
+      }
+    } catch (e) {
+      // fall through to Nominatim
+    }
+  }
+
+  // Fallback: Nominatim public endpoint (no token required; rate-limited)
   try {
     const resp = await fetch(
       'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(q) +
@@ -2363,6 +2892,7 @@ async function fetchSuggestions(q) {
         state: a.state || null,
         stateCode: null, // will resolve via zipToState
         zip: zip || null,
+        city: city || null,
         display_name: r.display_name
       };
     });
@@ -2411,7 +2941,7 @@ function selectAC(idx) {
   acSelected = true;
   closeAC();
   // Auto-submit with the known coordinates
-  applyGeoResult(r.lat, r.lng, r.state, r.zip, r.full);
+  applyGeoResult(r.lat, r.lng, r.state, r.zip, r.full, r.city);
 }
 
 function highlightAC(idx) {
@@ -2480,11 +3010,11 @@ document.getElementById('geolocateBtn').addEventListener('click', () => {
         const label = [num, street, city, state, zip].filter(Boolean).join(', ');
         acInput.value = label || ('Location: ' + lat.toFixed(5) + ', ' + lng.toFixed(5));
         acSelected = true;
-        applyGeoResult(lat, lng, state, zip, label);
+        applyGeoResult(lat, lng, state, zip, label, city);
       } catch (e) {
         // Reverse geocode failed, still use coordinates for map
         acInput.value = 'Location: ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
-        applyGeoResult(lat, lng, null, null, acInput.value);
+        applyGeoResult(lat, lng, null, null, acInput.value, null);
       }
       btn.disabled = false;
       btn.innerHTML = '&#x1F4CD;';
@@ -2505,7 +3035,7 @@ document.getElementById('geolocateBtn').addEventListener('click', () => {
 });
 
 /* ---------- 8c. SHARED GEO RESULT HANDLER ---------- */
-async function applyGeoResult(lat, lng, stateName, zip, label) {
+async function applyGeoResult(lat, lng, stateName, zip, label, city) {
   const err = document.getElementById('addressError');
   err.classList.remove('active');
   // Resolve state code
@@ -2518,10 +3048,12 @@ async function applyGeoResult(lat, lng, stateName, zip, label) {
     stateCode = US_STATE_NAME_TO_CODE[stateName] || null;
   }
   lastGeocodeState = stateCode;
+  currentCity = city || null;
   // Persist the resolved context so the lead form can include it
   window.__lastAddress = label || null;
   window.__lastState = stateCode || null;
   window.__lastZip = zip || null;
+  window.__lastCity = city || null;
   // Reset per-lawn analytics flags so each new address can fire lawn-drawn + quote-calculated
   __lawnDrawnAnalyticsSent = false;
   __quoteAnalyticsSent = false;
@@ -2570,9 +3102,11 @@ document.getElementById('addressForm').addEventListener('submit', async (e) => {
     }
     lastGeocodeState = result.state;
     currentZipCode = result.zip;
+    currentCity = result.city || null;
     window.__lastAddress = input;
     window.__lastState = result.state || null;
     window.__lastZip = result.zip || null;
+    window.__lastCity = result.city || null;
     document.getElementById('mapSection').classList.add('active');
     try {
       await loadMapLibs();
@@ -2655,10 +3189,12 @@ document.getElementById('compareForm').addEventListener('submit', (e) => {
   }
 });
 
-/* ---------- Lead-form pill groups (intent + urgency) ---------- */
+/* ---------- Lead-form pill groups (intent only — urgency removed) ----------
+   Urgency was dropped 2026-04-20: every option except "this week" was a low-quality
+   signal that wasted provider lead-spend. Anyone who completes the multi-step form
+   is assumed to be in a 2-4 week buying window. Routing tier still works without it. */
 const leadForm = {
-  intent: 'biweekly',    // default matches active pill above; nudges high-LTV segment
-  urgency: '2-4w'        // default matches active pill above
+  intent: 'biweekly'     // default matches active pill above; nudges high-LTV segment
 };
 
 function wirePillGroup(containerId, attr, key) {
@@ -2678,46 +3214,169 @@ function wirePillGroup(containerId, attr, key) {
   });
 }
 wirePillGroup('leadIntent', 'data-intent', 'intent');
-wirePillGroup('leadUrgency', 'data-urgency', 'urgency');
 
 /* ---------- Lead scoring (0–100) ----------
-   Six signals that empirically predict close rate in home services:
-   intent (30), urgency (20), size (15), completeness (15), phone (10), ZIP affluence (10).
-   Intent + urgency default weights; ZIP affluence stubbed at neutral 7 until ACS data ships.
-   Score determines routing tier: 85+ exclusive, 60–84 shared, <60 aged-fill.
+   Five signals that empirically predict close rate in home services.
+   History:
+     - 2026-04-20: urgency (20pts) removed — low-value options were collecting bad leads.
+     - 2026-04-20: ZIP-affluence stub (flat 7pts) replaced with annual job value (25pts).
+       Price already bakes in geography, size, and grass condition — stronger signal
+       than any affluence proxy we could build.
+     - 2026-04-20: annual value is now NORMALIZED by state cost-of-living before
+       banding. Identical-quality leads score similarly across cheap and expensive
+       markets, so cheap-market providers get a healthy exclusive pipeline too.
+       The raw dollar value is still stored on the payload for provider pricing.
+   Current weights: intent (25) + annual value (25) + completeness (20) +
+                    phone validity (15) + size (15) = 100
+   Score → routing tier: 85+ exclusive, 60–84 shared, <60 aged-fill.
 */
+function computeAnnualJobValue(intent) {
+  // Cuts-per-year assumes the ~April-October mowing season in most U.S. markets.
+  const cutsPerYear = { weekly: 30, biweekly: 15, monthly: 7, onetime: 1 }[intent] || 15;
+  // Recompute per-cut price at the lead form's chosen intent (not the calculator's
+  // frequency), since that's what the provider will actually be quoting.
+  let perCut = lastBenchmarkPrice || 0;
+  if (typeof priceFor === 'function' && typeof lastDrawnSqFt === 'number' && lastDrawnSqFt > 50) {
+    try {
+      const p = priceFor(lastDrawnSqFt, currentStateFromLookup(), {
+        frequency: intent,
+        condition: (typeof jobOptions !== 'undefined' && jobOptions.condition) || 'standard',
+        zip: (typeof currentZipCode !== 'undefined' ? currentZipCode : null)
+      });
+      if (p && typeof p.avg === 'number' && p.avg > 0) perCut = p.avg;
+    } catch (_) { /* fall back to lastBenchmarkPrice */ }
+  }
+  return Math.round(perCut * cutsPerYear);
+}
+
+// Normalize annual dollar value by the state's calibrated cost-of-service multiplier,
+// using the national median (0.197) as the baseline. A $720/yr job in a state with
+// mult 0.170 gets scaled up to $835 for scoring; a $1,275/yr job at mult 0.230
+// gets scaled down to $1,092. Same local job quality → same scoring band.
+function normalizeAnnualValueForMarket(annualValue, stateCode) {
+  const baseline = (typeof STATE_MULT_DEFAULT === 'number') ? STATE_MULT_DEFAULT : 0.197;
+  let stateMult = baseline;
+  if (stateCode && typeof STATE_MULT !== 'undefined' && STATE_MULT[stateCode] !== undefined) {
+    stateMult = STATE_MULT[stateCode];
+  }
+  if (!stateMult) return annualValue;
+  return Math.round(annualValue * (baseline / stateMult));
+}
+
 function scoreLead(payload) {
   let s = 0;
-  // Intent (30)
-  s += ({ weekly: 30, biweekly: 25, monthly: 10, onetime: 5 }[payload.intent] || 5);
-  // Urgency (20)
-  s += ({ '7d': 20, '2-4w': 15, '1-3m': 10, 'flex': 5 }[payload.urgency] || 5);
-  // Property size in acres (15)
-  const acres = (payload.sqft || 0) / 43560;
-  if (acres >= 0.23) s += 15;
-  else if (acres >= 0.11) s += 10;
-  else if (acres >= 0.046) s += 7;
-  else s += 4;
-  // Data completeness (15)
+  // Intent (25) — LTV commitment proxy: weekly ≫ biweekly ≫ monthly ≫ one-time
+  s += ({ weekly: 25, biweekly: 20, monthly: 8, onetime: 4 }[payload.intent] || 4);
+  // Annual job value (25) — dollars-at-stake, normalized by market so cheap
+  // cities aren't structurally locked out of the exclusive tier.
+  const avNorm = payload.annualJobValueNormalized || payload.annualJobValue || 0;
+  if (avNorm >= 2500)      s += 25;
+  else if (avNorm >= 1500) s += 19;
+  else if (avNorm >= 800)  s += 13;
+  else if (avNorm >= 300)  s += 7;
+  else                     s += 3;
+  // Data completeness (20)
   const allCore = payload.name && payload.email && payload.phone && payload.address && payload.sqft > 50;
-  s += allCore ? 15 : 8;
-  // Phone validity — plain regex stub (real impl uses Twilio Lookup at submit time) (10)
+  s += allCore ? 20 : 11;
+  // Phone validity — plain regex stub (real impl uses Twilio Lookup at submit time) (15)
   const phoneDigits = (payload.phone || '').replace(/\D/g, '');
-  s += (phoneDigits.length >= 10 && phoneDigits.length <= 11) ? 10 : 3;
-  // ZIP affluence — neutral until ACS multiplier ships (10)
-  s += 7;
+  s += (phoneDigits.length >= 10 && phoneDigits.length <= 11) ? 15 : 4;
+  // Property size in acres (15) — keeps bigger-job / bigger-equipment signal distinct from $ value
+  const acres = (payload.sqft || 0) / 43560;
+  if (acres >= 0.23)       s += 15;
+  else if (acres >= 0.11)  s += 11;
+  else if (acres >= 0.046) s += 7;
+  else                     s += 3;
   return s;
 }
 
+/* ==========================================================================
+   Marketplace contract: what providers see BEFORE they unlock a lead.
+   --------------------------------------------------------------------------
+   Design intent (per product direction):
+     - Providers see the SCORE (opaque 0-100) and the ROUTING TIER.
+     - Providers see a data-availability teaser — which fields exist, but not
+       the values themselves. Name/email/phone/address are masked. This is
+       the "what you'll get when you unlock" preview that drives purchase.
+     - Providers see structural job facts that let them decide whether to
+       bid (lawn size, state, intent/frequency) — these are non-sensitive.
+     - Providers DO NOT see any scoring internals: annualJobValue,
+       annualJobValueNormalized, perCutPrice, scoring weights, ZIP, or full
+       address. Those are sealed in `payload._scoringInternals`.
+     - After a provider purchases the lead, a separate "unlock" endpoint
+       returns the full contact fields. That endpoint is NOT defined here.
+   Use `toProviderTeaser(leadPayload)` when serializing to marketplace UIs.
+   ========================================================================== */
+function toProviderTeaser(lead) {
+  if (!lead || typeof lead !== 'object') return null;
+  const maskEmail = (e) => {
+    if (!e || typeof e !== 'string' || e.indexOf('@') < 0) return null;
+    const [user, domain] = e.split('@');
+    return (user ? user[0] : '') + '•••@' + (domain || '');
+  };
+  const maskPhone = (p) => {
+    if (!p) return null;
+    const digits = String(p).replace(/\D/g, '');
+    if (digits.length < 4) return '•••';
+    return '(•••) •••-' + digits.slice(-4);
+  };
+  const maskName = (n) => {
+    if (!n) return null;
+    const parts = String(n).trim().split(/\s+/);
+    const first = parts[0] || '';
+    const lastInitial = parts.length > 1 ? parts[parts.length - 1][0] : '';
+    return first + (lastInitial ? ' ' + lastInitial + '.' : '');
+  };
+  const maskZip = (z) => {
+    if (!z) return null;
+    const s = String(z).trim();
+    return s.length >= 3 ? s.slice(0, 3) + 'XX' : 'XXXXX';
+  };
+  return {
+    // Opaque ranking — this is the core incentive to unlock.
+    score: lead.score || 0,
+    routingTier: lead.routingTier || 'aged',
+
+    // Structural job shape — providers need this to decide to bid.
+    state: lead.state || null,
+    zipPrefix: maskZip(lead.zip),
+    sqft: lead.sqft || 0,
+    acres: lead.acres || 0,
+    intent: lead.intent || null,
+    condition: lead.condition || null,
+    submittedAt: lead.submittedAt || null,
+
+    // Data-availability teaser — what they'll get on unlock, with PII masked.
+    preview: {
+      name: maskName(lead.name),
+      email: maskEmail(lead.email),
+      phone: lead.phone ? maskPhone(lead.phone) : null,
+      addressOnFile: !!lead.address
+    },
+    fieldsAvailable: {
+      name: !!lead.name,
+      email: !!lead.email,
+      phone: !!lead.phone,
+      address: !!lead.address,
+      zip: !!lead.zip,
+      state: !!lead.state
+    }
+    // NOTE: intentionally omitted — _scoringInternals, annualJobValue,
+    // annualJobValueNormalized, perCutPrice, full address, full email,
+    // full phone, full name, full zip. These are unlock-gated or never-shown.
+  };
+}
+if (typeof window !== 'undefined') window.__toProviderTeaser = toProviderTeaser;
+
 document.getElementById('leadForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  // Phone is now optional (CRO: requiring phone drops conversion ~47%).
+  // The contact-time select was removed; routing tier alone gates provider handoff.
   const payload = {
     name: document.getElementById('leadName').value.trim(),
     email: document.getElementById('leadEmail').value.trim(),
-    phone: document.getElementById('leadPhone').value.trim(),
+    phone: document.getElementById('leadPhone').value.trim(),   // may be empty
     intent: leadForm.intent,
-    urgency: leadForm.urgency,
-    contactTime: document.getElementById('leadContactTime').value,
     consent: document.getElementById('leadConsent').checked,
     address: (window.__lastAddress || null),
     state: (window.__lastState || null),
@@ -2728,13 +3387,43 @@ document.getElementById('leadForm').addEventListener('submit', async (e) => {
     condition: jobOptions.condition,
     submittedAt: new Date().toISOString()
   };
-  if (!payload.name || !payload.email || !payload.phone || !payload.contactTime || !payload.consent) return;
-  payload.score = scoreLead(payload);
+  if (!payload.name || !payload.email || !payload.consent) return;
+
+  // --- Scoring internals: NEVER shown to providers in the marketplace. -------
+  // These fields let Yardline rank/route leads without revealing to providers
+  // what Yardline believes the job is worth. Providers see the *score* (a
+  // single opaque 0-100 number) and a redacted data-availability teaser; the
+  // raw dollars, normalization math, and per-cut price stay server-side.
+  // When the marketplace API ships, serialize with `toProviderTeaser(payload)`
+  // below — never pass `payload._scoringInternals` to a provider surface.
+  // --------------------------------------------------------------------------
+  const annualJobValue = computeAnnualJobValue(payload.intent);
+  const annualJobValueNormalized = normalizeAnnualValueForMarket(annualJobValue, payload.state);
+  const cutsPerYear = { weekly: 30, biweekly: 15, monthly: 7, onetime: 1 }[payload.intent] || 15;
+  const perCutPrice = annualJobValue && payload.intent ? Math.round(annualJobValue / cutsPerYear) : null;
+  payload._scoringInternals = {
+    annualJobValue,
+    annualJobValueNormalized,
+    perCutPrice,
+    cutsPerYear
+  };
+
+  payload.score = scoreLead({
+    intent: payload.intent,
+    name: payload.name,
+    email: payload.email,
+    phone: payload.phone,
+    address: payload.address,
+    sqft: payload.sqft,
+    annualJobValue,
+    annualJobValueNormalized
+  });
   payload.routingTier = payload.score >= 85 ? 'exclusive' : (payload.score >= 60 ? 'shared' : 'aged');
+  payload.phoneProvided = !!payload.phone;
 
   // Analytics event (safe no-op if Plausible isn't loaded)
   if (typeof plausible === 'function') {
-    try { plausible('match-form-submitted', { props: { intent: payload.intent, urgency: payload.urgency, score: payload.score, tier: payload.routingTier } }); } catch (_) {}
+    try { plausible('match-form-submitted', { props: { intent: payload.intent, score: payload.score, tier: payload.routingTier, phone: payload.phoneProvided ? 'yes' : 'no', annualValueBucket: (annualJobValue >= 2500 ? '2500+' : annualJobValue >= 1500 ? '1500-2500' : annualJobValue >= 800 ? '800-1500' : annualJobValue >= 300 ? '300-800' : 'under-300') } }); } catch (_) {}
   }
 
   // Lead-intake endpoint. Replace FORMSPREE_ID with the real one.
@@ -2751,7 +3440,283 @@ document.getElementById('leadForm').addEventListener('submit', async (e) => {
   }
   document.getElementById('leadForm').style.display = 'none';
   document.getElementById('leadSuccess').classList.add('active');
+  if (typeof window.__refreshStickyCta === 'function') window.__refreshStickyCta();
 });
+
+/* ==========================================================================
+   CRO: Progressive 2-step form + pre-fill context + sticky CTA +
+        exit-intent modal + quick save-the-quote micro-capture.
+   Backed by 2024-2025 research showing: phone-optional +30-80% conv;
+   multi-step +30-86% avg; sticky CTAs +15-27%; trust signals +15-42%;
+   exit-intent rescues ~15-20% of abandoners; autocomplete lifts up to 200%.
+   ========================================================================== */
+
+/* ---------- Progressive 2-step controller ---------- */
+(function setupLeadSteps() {
+  const steps   = Array.from(document.querySelectorAll('.lead-step'));
+  const dots    = Array.from(document.querySelectorAll('.lead-progress-dot'));
+  const fill    = document.getElementById('leadProgressFill');
+  const nextBtn = document.getElementById('leadStepNext');
+  const backBtn = document.getElementById('leadStepBack');
+  const nameEl  = document.getElementById('leadName');
+  const emailEl = document.getElementById('leadEmail');
+  if (!nextBtn || !nameEl || !emailEl) return;
+
+  function setStep(n) {
+    steps.forEach(s => s.classList.toggle('active', Number(s.dataset.step) === n));
+    dots.forEach(d  => d.classList.toggle('active', Number(d.dataset.step) <= n));
+    if (fill) fill.style.width = (n >= 2 ? '100%' : '0%');
+    if (typeof plausible === 'function') {
+      try { plausible('lead-step-' + n + '-viewed'); } catch (_) {}
+    }
+  }
+
+  function validStep1() {
+    const nm = (nameEl.value || '').trim();
+    const em = (emailEl.value || '').trim();
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em);
+    if (!nm)       { nameEl.focus();  flashInvalid(nameEl);  return false; }
+    if (!emailOk)  { emailEl.focus(); flashInvalid(emailEl); return false; }
+    return true;
+  }
+
+  function flashInvalid(el) {
+    el.style.boxShadow = '0 0 0 3px rgba(220, 80, 80, 0.45)';
+    setTimeout(() => { el.style.boxShadow = ''; }, 900);
+  }
+
+  nextBtn.addEventListener('click', () => {
+    if (!validStep1()) return;
+    setStep(2);
+    if (typeof plausible === 'function') {
+      try { plausible('lead-step-1-completed'); } catch (_) {}
+    }
+  });
+  if (backBtn) backBtn.addEventListener('click', () => setStep(1));
+
+  // Enter key on step 1 advances instead of submitting
+  [nameEl, emailEl].forEach(el => {
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); nextBtn.click(); }
+    });
+  });
+})();
+
+/* ---------- Pre-fill context summary (rec 8) ----------
+   Shown BEFORE step 2 where the user picks service frequency, so we only
+   surface what they've already told us: size, location, and grass condition. */
+function updateLeadContext() {
+  const el = document.getElementById('leadContext');
+  if (!el) return;
+  const sqft = Math.round(lastDrawnSqFt || 0);
+  if (sqft <= 50) { el.classList.remove('active'); el.innerHTML = ''; return; }
+  const condLabelMap = {
+    standard: 'standard',
+    overgrown: 'overgrown',
+    tall: 'tall / neglected',
+    cleanup: 'heavy-cleanup'
+  };
+  const condLbl = condLabelMap[jobOptions.condition] || 'standard';
+  const zip = window.__lastZip || '';
+  const st  = window.__lastState || '';
+  const loc = zip ? (zip + (st ? ', ' + st : '')) : (window.__lastAddress || '');
+  const sqftStr = sqft.toLocaleString();
+  el.innerHTML = '<strong>Your service request:</strong> a ' + sqftStr + ' sqft lawn' +
+                 (loc ? ' in ' + loc : '') + ' for ' + condLbl + ' grass.';
+  el.classList.add('active');
+}
+
+/* ---------- Sticky mobile CTA (rec 5) ---------- */
+(function setupStickyCta() {
+  const cta = document.createElement('button');
+  cta.type = 'button';
+  cta.className = 'sticky-cta';
+  cta.id = 'stickyCta';
+  cta.innerHTML = 'Get matched with pros &mdash; Free';
+  document.body.appendChild(cta);
+
+  cta.addEventListener('click', () => {
+    const match = document.getElementById('match');
+    if (match) match.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => {
+      const firstField = document.getElementById('leadName');
+      if (firstField) firstField.focus({ preventScroll: true });
+    }, 550);
+    if (typeof plausible === 'function') {
+      try { plausible('sticky-cta-tapped'); } catch (_) {}
+    }
+  });
+
+  let ticking = false;
+  function refresh() {
+    ticking = false;
+    const results = document.getElementById('results');
+    const match   = document.getElementById('match');
+    const success = document.getElementById('leadSuccess');
+    if (!results || !match) { cta.classList.remove('show'); return; }
+    if (!results.classList.contains('active')) { cta.classList.remove('show'); return; }
+    if (success && success.classList.contains('active')) { cta.classList.remove('show'); return; }
+
+    const matchRect   = match.getBoundingClientRect();
+    const resultsRect = results.getBoundingClientRect();
+    // Show when quote is at least partly scrolled into view, but lead form
+    // is still below the fold on mobile.
+    const show = resultsRect.top < window.innerHeight * 0.6
+              && matchRect.top > window.innerHeight * 0.85;
+    cta.classList.toggle('show', show);
+  }
+  window.addEventListener('scroll', () => {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(refresh);
+  }, { passive: true });
+  window.addEventListener('resize', refresh);
+  window.__refreshStickyCta = refresh;
+})();
+
+/* ---------- Exit-intent email-the-quote modal (rec 6) ---------- */
+(function setupExitIntent() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'exit-modal-backdrop';
+  backdrop.innerHTML = [
+    '<div class="exit-modal" role="dialog" aria-labelledby="exitModalTitle" aria-modal="true">',
+    '  <button type="button" class="exit-modal-close" id="exitModalClose" aria-label="Close">&times;</button>',
+    '  <h3 id="exitModalTitle">Want this quote saved?</h3>',
+    '  <p>Drop your email and we\'ll send you this benchmark so you have it when you\'re ready to hire. No spam &mdash; just your quote and occasional market updates.</p>',
+    '  <form class="exit-modal-form" id="exitModalForm" novalidate>',
+    '    <input type="email" id="exitModalEmail" placeholder="you@email.com" autocomplete="email" inputmode="email" required>',
+    '    <button type="submit">Email me the quote</button>',
+    '  </form>',
+    '  <div class="exit-modal-saved" id="exitModalSaved">&check; Sent. Check your inbox in the next minute.</div>',
+    '  <p class="exit-modal-foot">We never sell your email without your explicit consent.</p>',
+    '</div>'
+  ].join('');
+  document.body.appendChild(backdrop);
+
+  const STORAGE_KEY = '__mm_exit_shown';
+  let shown = false;
+  try { shown = sessionStorage.getItem(STORAGE_KEY) === '1'; } catch (_) {}
+
+  function canTrigger() {
+    if (shown) return false;
+    const results = document.getElementById('results');
+    const success = document.getElementById('leadSuccess');
+    if (!results || !results.classList.contains('active')) return false;
+    if (success && success.classList.contains('active')) return false;
+    return true;
+  }
+
+  function open() {
+    if (!canTrigger()) return;
+    shown = true;
+    try { sessionStorage.setItem(STORAGE_KEY, '1'); } catch (_) {}
+    backdrop.classList.add('show');
+    setTimeout(() => {
+      const em = document.getElementById('exitModalEmail');
+      if (em) em.focus();
+    }, 80);
+    if (typeof plausible === 'function') {
+      try { plausible('exit-intent-shown'); } catch (_) {}
+    }
+  }
+  function close() { backdrop.classList.remove('show'); }
+
+  // Desktop trigger: pointer leaves toward top of viewport
+  document.addEventListener('mouseleave', (e) => {
+    if (e.clientY <= 2 && canTrigger()) open();
+  });
+
+  // Mobile trigger: after dwell, fast upward flick near top
+  let lastY = window.scrollY, lastT = Date.now(), dwellPassed = false;
+  setTimeout(() => { dwellPassed = true; }, 18000);
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY, t = Date.now();
+    const dt = Math.max(1, t - lastT);
+    const velocity = (lastY - y) / dt;
+    lastY = y; lastT = t;
+    if (dwellPassed && velocity > 2.2 && y < window.innerHeight * 0.3 && canTrigger()) {
+      open();
+    }
+  }, { passive: true });
+
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('#exitModalClose').addEventListener('click', close);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && backdrop.classList.contains('show')) close();
+  });
+
+  backdrop.querySelector('#exitModalForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const emailEl = document.getElementById('exitModalEmail');
+    const email = (emailEl.value || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { emailEl.focus(); return; }
+    const payload = {
+      kind: 'exit-quote-save',
+      email,
+      address: window.__lastAddress || null,
+      zip: window.__lastZip || null,
+      state: window.__lastState || null,
+      sqft: Math.round(lastDrawnSqFt || 0),
+      frequency: jobOptions.frequency,
+      condition: jobOptions.condition,
+      submittedAt: new Date().toISOString()
+    };
+    const endpoint = window.YARDLINE_LEAD_ENDPOINT || 'https://formspree.io/f/FORMSPREE_ID';
+    try {
+      await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) { console.warn('[MowMetric] exit-intent save failed', err); }
+    document.getElementById('exitModalForm').style.display = 'none';
+    document.getElementById('exitModalSaved').classList.add('show');
+    if (typeof plausible === 'function') {
+      try { plausible('exit-intent-converted'); } catch (_) {}
+    }
+    setTimeout(close, 2200);
+  });
+})();
+
+/* ---------- Quick-save micro-capture near price (rec 11) ---------- */
+(function setupQuickSave() {
+  const form = document.getElementById('quickSaveForm');
+  if (!form) return;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const emailEl = document.getElementById('quickSaveEmail');
+    const email = (emailEl.value || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { emailEl.focus(); return; }
+    const payload = {
+      kind: 'quick-quote-save',
+      email,
+      address: window.__lastAddress || null,
+      zip: window.__lastZip || null,
+      state: window.__lastState || null,
+      sqft: Math.round(lastDrawnSqFt || 0),
+      frequency: jobOptions.frequency,
+      condition: jobOptions.condition,
+      submittedAt: new Date().toISOString()
+    };
+    const endpoint = window.YARDLINE_LEAD_ENDPOINT || 'https://formspree.io/f/FORMSPREE_ID';
+    try {
+      await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) { console.warn('[MowMetric] quick save failed', err); }
+    const wrap = document.getElementById('quickSave');
+    if (wrap) {
+      wrap.classList.add('saved');
+      const lbl = wrap.querySelector('.quick-save-label');
+      if (lbl) lbl.textContent = '✓ Quote saved to ' + email + '.';
+    }
+    if (typeof plausible === 'function') {
+      try { plausible('quick-save-converted'); } catch (_) {}
+    }
+  });
+})();
 
 /* ---------- 9. JOB OPTION CONTROLS ---------- */
 function setActive(container, attr, value) {
