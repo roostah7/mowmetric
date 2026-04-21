@@ -19,10 +19,12 @@
 
 <!-- Preconnect to CDN and geocoding endpoints for faster first paint -->
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="preconnect" href="https://esm.sh" crossorigin>
 <link rel="preconnect" href="https://api.mapbox.com" crossorigin>
 <link rel="preconnect" href="https://nominatim.openstreetmap.org">
 <link rel="preconnect" href="https://geocoding.geo.census.gov">
 <link rel="preconnect" href="https://server.arcgisonline.com" crossorigin>
+<link rel="preconnect" href="https://overturemaps-extras-us-west-2.s3.amazonaws.com" crossorigin>
 <link rel="preconnect" href="https://plausible.io" crossorigin>
 
 <!-- =============================================================== -->
@@ -50,12 +52,13 @@
 <script defer data-domain="mowmetric.com" src="https://plausible.io/js/script.tagged-events.js"></script>
 <script>window.plausible = window.plausible || function() { (window.plausible.q = window.plausible.q || []).push(arguments); };</script>
 
-<!-- Leaflet + Leaflet.draw + Turf.js are lazy-loaded after address entry (see loadMapLibs()).
+<!-- Leaflet + Turf.js are lazy-loaded after address entry (see loadMapLibs()). A small
+     custom polygon-drawing handler lives inline in this file (see drawState below) —
+     it replaces the abandonware leaflet-draw plugin with a touch-first tap-to-add
+     flow, a Done/Undo toolbar, and an OSM-buildings pre-outline overlay.
      Prefetching them so they're in cache the moment the user hits "Find my lawn". -->
 <link rel="prefetch" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" as="style">
 <link rel="prefetch" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" as="script">
-<link rel="prefetch" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" as="style">
-<link rel="prefetch" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js" as="script">
 <link rel="prefetch" href="https://unpkg.com/@turf/turf@6/turf.min.js" as="script">
 
 <!-- Structured data: the site as a WebApplication -->
@@ -1556,9 +1559,56 @@ footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
 }
 .error-msg.active { display: block; }
 
-/* ---------- LEAFLET POLYGON STYLE OVERRIDES ---------- */
-.leaflet-draw-toolbar a {
-  background-image: url('https://unpkg.com/leaflet-draw@1.0.4/dist/images/spritesheet.svg');
+/* ---------- TOUCH-FIRST POLYGON DRAWING ---------- */
+/* Vertex markers rendered as Leaflet CircleMarker — the radii here match the
+   SVG circle elements, but the :hover glow + focus outline are CSS-driven. */
+.leaflet-interactive.mm-vertex {
+  cursor: grab;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
+}
+.leaflet-interactive.mm-vertex-first {
+  filter: drop-shadow(0 0 4px rgba(244,166,42,0.9));
+}
+
+/* Overpass-sourced building footprints sit under drawn polygons with a soft
+   warm tint. They ARE tappable — tapping one marks it as "my house" and
+   subtracts its footprint from the lawn area. Excluded buildings get a red
+   dashed style applied at the Leaflet layer level (see BUILDING_EXCLUDED_STYLE). */
+.leaflet-interactive.mm-building {
+  cursor: pointer;
+  transition: fill-opacity 120ms ease;
+}
+.leaflet-interactive.mm-building:hover {
+  fill-opacity: 0.5 !important;
+}
+
+/* Tap-to-exclude hint that appears only when Overpass returned buildings.
+   Sized for legibility on mobile without crowding the map. */
+.building-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted, #6b7280);
+  line-height: 1.4;
+}
+
+/* Crosshair cursor while drawing so desktop users get visual mode feedback. */
+.map-wrap.is-drawing .leaflet-container {
+  cursor: crosshair;
+}
+
+/* Toolbar buttons that only appear while actively drawing. */
+.map-toolbar .draw-only { display: none; }
+.map-toolbar.is-drawing .draw-only { display: inline-flex; }
+.map-toolbar.is-drawing #drawStartBtn { display: none; }
+
+/* Ensure every toolbar button clears Apple's 44px touch-target minimum. */
+.map-toolbar .btn {
+  min-height: 48px;
+  padding: 12px 18px;
+}
+@media (max-width: 560px) {
+  .map-toolbar { gap: 8px; }
+  .map-toolbar .btn { flex: 1 1 auto; min-width: 0; }
 }
 </style>
 </head>
@@ -1633,18 +1683,30 @@ footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
         <div class="step-header" style="border-top: 1px solid var(--line);">
           <span class="step-badge">Step 2</span>
           <h2>Outline the area you want mowed</h2>
-          <p>Click the polygon tool on the map, then click each corner of your lawn. Double-click to finish.</p>
+          <p>Tap <strong>Draw lawn</strong>, then tap each corner of the grass. When you're done, tap <strong>Done</strong>.</p>
         </div>
 
         <div class="map-instructions">
-          <span class="emoji">🖱️</span>
-          <span><strong>Tip:</strong> Trace the edges of the grass — skip driveways, patios, and flower beds. You can draw multiple shapes for yards with separate sections.</span>
+          <span class="emoji">👆</span>
+          <span><strong>Tip:</strong> Your house is already outlined for you — just trace around the grass. Skip driveways, patios, and flower beds. You can draw multiple shapes for yards with separate sections.</span>
         </div>
 
-        <div id="map"></div>
+        <div class="map-wrap" id="mapWrap">
+          <div id="map"></div>
+        </div>
 
-        <div class="map-toolbar">
-          <button type="button" class="btn secondary" id="clearBtn">Clear drawing</button>
+        <!-- Shown only when OSM Overpass returns at least one building footprint
+             for this address. Building polys are tappable: tap = "that's my
+             house, subtract it from the lawn." -->
+        <p class="building-hint" id="buildingHint" style="display:none">
+          🏠 Tap a tan building to subtract it from your lawn area.
+        </p>
+
+        <div class="map-toolbar" id="mapToolbar">
+          <button type="button" class="btn" id="drawStartBtn">Draw lawn</button>
+          <button type="button" class="btn draw-only" id="drawDoneBtn">Done</button>
+          <button type="button" class="btn secondary draw-only" id="drawUndoBtn">Undo last point</button>
+          <button type="button" class="btn secondary" id="clearBtn">Clear</button>
           <div class="area-display">
             <span class="area-num" id="areaNum">0</span> <span class="area-unit" id="areaUnit">acres</span>
             <span class="area-sub" id="areaSub"></span>
@@ -1930,7 +1992,9 @@ footer .small { font-size: 0.78rem; color: #7a9480; margin-top: 14px; }
       Pricing data sourced from U.S. Bureau of Labor Statistics (Occupational Employment Statistics,
       SOC 37-3011). Map tiles &amp; address lookup © <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noopener">Mapbox</a>
       and © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors,
-      with U.S. Census Bureau and Esri World Imagery as fallbacks.
+      with U.S. Census Bureau and Esri World Imagery as fallbacks. Building footprints
+      © <a href="https://overturemaps.org/" target="_blank" rel="noopener">Overture Maps Foundation</a>
+      (ODbL).
     </div>
     <div class="small">© 2026 MowMetric. All rights reserved.</div>
   </div>
@@ -2232,16 +2296,29 @@ function priceFor(sqft, stateCode, opts) {
 
 /* ---------- 4. MAP INITIALIZATION ---------- */
 let map;
-let drawnItems;
-let drawControl;
+let drawnItems;            // L.FeatureGroup of COMPLETED lawn polygons (iterated by recalcArea)
+let buildingsLayer;        // L.GeoJSON of OSM building footprints (tap to exclude from lawn)
+// Map<L.Polygon, sqMeters> — buildings the user has tapped to subtract from the lawn.
+const excludedBuildings = new Map();
 let currentZipCode = null;
 let currentCity = null;
 
-/* Lazy-loader for Leaflet + Leaflet.draw + Turf.js.
-   Returns a Promise that resolves when all three libraries are available on window.
-   Called on-demand the first time the user asks to see a map — keeps initial page
-   payload tiny (<40 KB HTML) and TTFB-friendly, while the head <link rel="prefetch">
-   tags warm the browser cache in parallel. */
+// State for the custom tap-to-add polygon-drawing handler (replaces leaflet-draw).
+// See beginDrawing() / addVertex() / finishDrawing() / undoVertex() / cancelDrawing().
+const drawState = {
+  mode: 'idle',            // 'idle' | 'drawing'
+  vertices: [],            // array of L.LatLng for the in-progress polygon
+  polyline: null,          // L.Polyline of the edges as they're being drawn
+  vertexMarkers: [],       // array of L.CircleMarker (one per vertex)
+};
+
+/* Lazy-loader for Leaflet + Turf.js. Returns a Promise that resolves when both
+   libraries are available on window. Called on-demand the first time the user
+   asks to see a map — keeps initial page payload tiny (<40 KB HTML) and TTFB-
+   friendly, while the head <link rel="prefetch"> tags warm the browser cache in
+   parallel. The polygon-drawing handler is custom (see drawState below); we
+   dropped leaflet-draw entirely since it's abandonware and was the main source
+   of the wonky mobile UX. */
 let __mapLibsPromise = null;
 function loadMapLibs() {
   if (__mapLibsPromise) return __mapLibsPromise;
@@ -2262,17 +2339,9 @@ function loadMapLibs() {
     document.head.appendChild(s);
   });
   __mapLibsPromise = (async () => {
-    // CSS first (can load in parallel)
-    await Promise.all([
-      addCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'),
-      addCss('https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css')
-    ]);
-    // Leaflet must load before Leaflet.draw
+    await addCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
     await addJs('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
-    await Promise.all([
-      addJs('https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js'),
-      addJs('https://unpkg.com/@turf/turf@6/turf.min.js')
-    ]);
+    await addJs('https://unpkg.com/@turf/turf@6/turf.min.js');
   })();
   return __mapLibsPromise;
 }
@@ -2319,44 +2388,370 @@ function initMap(lat, lng) {
     ).addTo(map);
   }
 
-  // Feature group to store drawn shapes
+  // Layers:
+  //   buildingsLayer holds the (non-editable) OSM-sourced house footprints
+  //   drawnItems holds completed user-drawn lawn polygons
+  // Both are FeatureGroups so we can addLayer/removeLayer cheaply and iterate
+  // without picking up the in-progress polyline or vertex markers.
+  buildingsLayer = new L.FeatureGroup();
+  map.addLayer(buildingsLayer);
   drawnItems = new L.FeatureGroup();
   map.addLayer(drawnItems);
 
-  // Drawing controls — polygons only, no fancy shapes
-  drawControl = new L.Control.Draw({
-    position: 'topleft',
-    draw: {
-      polygon: {
-        allowIntersection: false,
-        shapeOptions: {
-          color: '#f4a62a',
-          weight: 3,
-          fillColor: '#f4a62a',
-          fillOpacity: 0.35
-        },
-        showArea: false
-      },
-      polyline: false,
-      circle: false,
-      rectangle: false,
-      marker: false,
-      circlemarker: false
-    },
-    edit: {
-      featureGroup: drawnItems,
-      remove: true
+  // A single click handler routes taps either to "add vertex while drawing" or
+  // "delete a completed polygon" depending on where on the map the tap landed.
+  // Taps on the Leaflet tile layer (empty map) during drawing = add vertex.
+  map.on('click', onMapClick);
+}
+
+/* ---------- CUSTOM POLYGON DRAWING HANDLER ----------
+   We replaced leaflet-draw (abandonware, mouse-first) with ~150 lines of custom
+   code because:
+     - Terra Draw would be ~200KB of library + adapter for the same behavior
+     - Direct control of Leaflet primitives lets us tune every touch target
+     - Future SAM-based auto-detect integrates more cleanly without fighting a
+       third-party library's own state machine.
+
+   Flow:
+     1. User taps "Draw lawn"  -> beginDrawing()      (mode = 'drawing')
+     2. User taps the map      -> addVertex(latlng)   (grows the polyline)
+     3. User taps "Done"       -> finishDrawing()     (polygon locked in)
+     4. User taps "Undo"       -> undoVertex()        (pops last vertex)
+     5. User taps "Clear"      -> cancelDrawing() + drawnItems.clearLayers()
+*/
+const POLY_STYLE = {
+  color: '#f4a62a',
+  weight: 3,
+  fillColor: '#f4a62a',
+  fillOpacity: 0.35,
+};
+const BUILDING_STYLE = {
+  color: '#7a5a2e',
+  weight: 1.5,
+  fillColor: '#c49f6a',
+  fillOpacity: 0.30,
+  className: 'mm-building',
+};
+// Applied when the user taps a building to say "that's my house, subtract it."
+const BUILDING_EXCLUDED_STYLE = {
+  color: '#c03030',
+  weight: 2,
+  fillColor: '#c03030',
+  fillOpacity: 0.45,
+  className: 'mm-building mm-building-excluded',
+  dashArray: '4,3',
+};
+const VERTEX_RADIUS = 10;       // px — well above the 8px leaflet-draw default
+const VERTEX_FIRST_RADIUS = 14; // bigger circle for the "tap-to-close" target
+const VERTEX_STYLE = {
+  radius: VERTEX_RADIUS,
+  color: '#ffffff',
+  weight: 2,
+  fillColor: '#f4a62a',
+  fillOpacity: 1,
+  className: 'mm-vertex',
+};
+const VERTEX_FIRST_STYLE = {
+  ...VERTEX_STYLE,
+  radius: VERTEX_FIRST_RADIUS,
+  fillColor: '#d88400',
+  className: 'mm-vertex mm-vertex-first',
+};
+
+function beginDrawing() {
+  if (!map || drawState.mode === 'drawing') return;
+  drawState.mode = 'drawing';
+  drawState.vertices = [];
+  drawState.polyline = L.polyline([], POLY_STYLE).addTo(map);
+  drawState.vertexMarkers = [];
+  updateToolbarUI();
+}
+
+function cancelDrawing() {
+  if (drawState.polyline) { map.removeLayer(drawState.polyline); drawState.polyline = null; }
+  drawState.vertexMarkers.forEach(m => map.removeLayer(m));
+  drawState.vertexMarkers = [];
+  drawState.vertices = [];
+  drawState.mode = 'idle';
+  updateToolbarUI();
+}
+
+function addVertex(latlng) {
+  drawState.vertices.push(latlng);
+  drawState.polyline.setLatLngs(drawState.vertices);
+  const isFirst = drawState.vertexMarkers.length === 0;
+  const style = isFirst ? VERTEX_FIRST_STYLE : VERTEX_STYLE;
+  const marker = L.circleMarker(latlng, style).addTo(map);
+  // Tapping the first vertex when 3+ points exist closes the polygon — the
+  // classic Leaflet draw behavior, preserved because people expect it to work.
+  if (isFirst) {
+    marker.on('click', (ev) => {
+      L.DomEvent.stopPropagation(ev);
+      if (drawState.vertices.length >= 3) finishDrawing();
+    });
+  }
+  drawState.vertexMarkers.push(marker);
+}
+
+function undoVertex() {
+  if (drawState.mode !== 'drawing' || drawState.vertices.length === 0) return;
+  drawState.vertices.pop();
+  const last = drawState.vertexMarkers.pop();
+  if (last) map.removeLayer(last);
+  drawState.polyline.setLatLngs(drawState.vertices);
+}
+
+function finishDrawing() {
+  if (drawState.mode !== 'drawing') return;
+  if (drawState.vertices.length < 3) {
+    // Not enough points for a polygon — soft abort, leave in drawing mode so
+    // the user can add more vertices instead of starting over.
+    return;
+  }
+  const polygon = L.polygon(drawState.vertices, POLY_STYLE);
+  polygon.on('click', (ev) => {
+    L.DomEvent.stopPropagation(ev);
+    if (confirm('Remove this shape?')) {
+      drawnItems.removeLayer(polygon);
+      recalcArea();
     }
   });
-  map.addControl(drawControl);
+  drawnItems.addLayer(polygon);
+  cancelDrawing();             // tears down polyline + vertex markers
+  recalcArea();
+  if (typeof plausible === 'function') plausible('Lawn drawn');
+}
 
-  // Draw events
-  map.on(L.Draw.Event.CREATED, (e) => {
-    drawnItems.addLayer(e.layer);
-    recalcArea();
+function onMapClick(ev) {
+  if (drawState.mode !== 'drawing') return;
+  // Ignore clicks that originated from a vertex marker (handled above).
+  if (ev.originalEvent && ev.originalEvent.__mmHandled) return;
+  addVertex(ev.latlng);
+}
+
+function updateToolbarUI() {
+  const toolbar = document.getElementById('mapToolbar');
+  const wrap = document.getElementById('mapWrap');
+  if (!toolbar || !wrap) return;
+  const drawing = drawState.mode === 'drawing';
+  toolbar.classList.toggle('is-drawing', drawing);
+  wrap.classList.toggle('is-drawing', drawing);
+}
+
+/* ---------- BUILDING FOOTPRINT PRELOAD ----------
+   Called once we have a geocoded lat/lng. Two data sources, tried in order:
+
+     1. Overture Maps buildings (Microsoft + Google + OSM + partner data merged).
+        Served as a single PMTiles file on AWS, queried via HTTP range requests.
+        Near-complete US residential coverage. Free under ODbL (attribution in
+        the map credits line).
+     2. Overpass API / OpenStreetMap — the pre-existing fallback. Used only if
+        Overture returns zero features or errors out. OSM is sparse outside
+        dense cities, so this is a safety net rather than a primary source.
+
+   Failure modes are intentionally silent — the manual-draw flow always works
+   regardless of whether we successfully outlined anything.                    */
+const OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter';
+// Pinned to the 2026-03-18.0 release in the *extras* bucket — verified to
+// have full CORS (Access-Control-Allow-Origin: *, range header allowed) which
+// the older `-tiles-us-west-2-beta` bucket does NOT. Browsers can fetch this
+// directly. If AWS ever 404s this URL, the Overpass fallback still pre-outlines
+// whatever OSM has.
+const OVERTURE_BUILDINGS_PMTILES =
+  'https://overturemaps-extras-us-west-2.s3.amazonaws.com/tiles/2026-03-18.0/buildings.pmtiles';
+// Zoom 14 is a sweet spot: building polygons are detailed (not over-simplified),
+// and one 14-tile covers ~2.4km at the equator — typically 1 tile per address.
+const OVERTURE_ZOOM = 14;
+const BUILDING_BBOX_METERS = 150;
+
+// Lazy-loaded once on first geocode. Keeping these out of the initial page load
+// saves ~150KB of JS for users who never reach the map section.
+let _pmtilesLib = null;
+let _mvtLib = null;
+let _pmtilesInstance = null;
+
+async function loadPmtilesDeps() {
+  if (_pmtilesLib && _mvtLib) return { PMTiles: _pmtilesLib.PMTiles, VectorTile: _mvtLib.VectorTile, Pbf: _mvtLib.Pbf };
+  // esm.sh transparently converts CJS packages (@mapbox/vector-tile, pbf) to
+  // ESM modules the browser can import().
+  const [pm, vt, pbf] = await Promise.all([
+    import('https://esm.sh/pmtiles@3.0.5'),
+    import('https://esm.sh/@mapbox/vector-tile@1.3.1'),
+    import('https://esm.sh/pbf@3.2.1'),
+  ]);
+  _pmtilesLib = pm;
+  _mvtLib = { VectorTile: vt.VectorTile, Pbf: pbf.default || pbf };
+  return { PMTiles: pm.PMTiles, VectorTile: vt.VectorTile, Pbf: _mvtLib.Pbf };
+}
+
+function getBbox(lat, lng) {
+  const delta = BUILDING_BBOX_METERS / 111320;
+  const lonDelta = delta / Math.max(0.1, Math.cos(lat * Math.PI / 180));
+  return {
+    south: lat - delta, north: lat + delta,
+    west: lng - lonDelta, east: lng + lonDelta,
+  };
+}
+
+// Standard web-mercator lat/lng → tile coords at a given zoom.
+function latLngToTile(lat, lng, z) {
+  const n = 2 ** z;
+  const x = Math.floor(((lng + 180) / 360) * n);
+  const latRad = lat * Math.PI / 180;
+  const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+  return { x, y };
+}
+
+function tilesForBbox(bbox, z) {
+  const tl = latLngToTile(bbox.north, bbox.west, z);
+  const br = latLngToTile(bbox.south, bbox.east, z);
+  const tiles = [];
+  for (let x = tl.x; x <= br.x; x++) {
+    for (let y = tl.y; y <= br.y; y++) {
+      tiles.push({ z, x, y });
+    }
+  }
+  return tiles;
+}
+
+// Does [lng, lat] point intersect the bbox? Cheap and good enough — we only
+// care about "is any vertex of this building near our address".
+function bboxIntersects(coords, bbox) {
+  for (const [lng, lat] of coords) {
+    if (lat >= bbox.south && lat <= bbox.north && lng >= bbox.west && lng <= bbox.east) return true;
+  }
+  return false;
+}
+
+// Shared "add one building polygon to the map" helper. Both Overture and
+// Overpass paths converge here so tap-to-exclude behaves identically.
+function addBuildingPolygon(ring /* [[lat,lng], ...] */) {
+  if (!Array.isArray(ring) || ring.length < 3) return null;
+  const first = ring[0], last = ring[ring.length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first);
+  const poly = L.polygon(ring, BUILDING_STYLE);
+  poly.on('click', (ev) => {
+    L.DomEvent.stopPropagation(ev);
+    if (drawState.mode === 'drawing') { addVertex(ev.latlng); return; }
+    toggleBuildingExcluded(poly);
   });
-  map.on(L.Draw.Event.EDITED, recalcArea);
-  map.on(L.Draw.Event.DELETED, recalcArea);
+  buildingsLayer.addLayer(poly);
+  return poly;
+}
+
+// Primary source: Overture Maps PMTiles. Returns number of buildings added.
+async function loadBuildingsFromOverture(lat, lng) {
+  const { PMTiles, VectorTile, Pbf } = await loadPmtilesDeps();
+  if (!_pmtilesInstance) _pmtilesInstance = new PMTiles(OVERTURE_BUILDINGS_PMTILES);
+  const bbox = getBbox(lat, lng);
+  const tiles = tilesForBbox(bbox, OVERTURE_ZOOM);
+  let added = 0;
+  // Kick off all tile fetches in parallel — usually just 1, occasionally 2-4
+  // when the address sits on a tile boundary.
+  const results = await Promise.allSettled(
+    tiles.map(t => _pmtilesInstance.getZxy(t.z, t.x, t.y).then(r => ({ tile: t, result: r })))
+  );
+  for (const settled of results) {
+    if (settled.status !== 'fulfilled' || !settled.value.result) continue;
+    const { tile, result } = settled.value;
+    let buf;
+    try {
+      buf = new Uint8Array(result.data);
+      const vectorTile = new VectorTile(new Pbf(buf));
+      // Overture's buildings theme uses the layer name "building" (singular).
+      // Guard against either naming just in case a release changes it.
+      const layer = vectorTile.layers.building || vectorTile.layers.buildings;
+      if (!layer) continue;
+      for (let i = 0; i < layer.length; i++) {
+        const feature = layer.feature(i);
+        const gj = feature.toGeoJSON(tile.x, tile.y, tile.z);
+        const geom = gj && gj.geometry;
+        if (!geom) continue;
+        // Building polygons are always Polygon or MultiPolygon; flatten both.
+        const polygons = geom.type === 'Polygon' ? [geom.coordinates]
+                        : geom.type === 'MultiPolygon' ? geom.coordinates : [];
+        for (const rings of polygons) {
+          const outerRing = rings[0];  // ignore holes — rare in residential footprints
+          if (!outerRing || !bboxIntersects(outerRing, bbox)) continue;
+          // GeoJSON is [lng, lat]; Leaflet wants [lat, lng].
+          const leafletRing = outerRing.map(([x, y]) => [y, x]);
+          if (addBuildingPolygon(leafletRing)) added++;
+        }
+      }
+    } catch (_e) { /* bad tile → skip, not fatal */ }
+  }
+  return added;
+}
+
+// Fallback source: OpenStreetMap via Overpass. Kept as-is so we still get
+// *something* when Overture has gaps or the tile URL 404s between releases.
+async function loadBuildingsFromOverpass(lat, lng) {
+  const bbox = getBbox(lat, lng);
+  const query = `[out:json][timeout:8];(way["building"](${bbox.south},${bbox.west},${bbox.north},${bbox.east}););out geom;`;
+  const url = OVERPASS_ENDPOINT + '?data=' + encodeURIComponent(query);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 9000);
+  let added = 0;
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return 0;
+    const data = await res.json();
+    if (!data || !Array.isArray(data.elements)) return 0;
+    for (const el of data.elements) {
+      if (el.type !== 'way' || !Array.isArray(el.geometry) || el.geometry.length < 3) continue;
+      const ring = el.geometry.map(g => [g.lat, g.lon]);
+      if (addBuildingPolygon(ring)) added++;
+    }
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  return added;
+}
+
+async function loadBuildingsFor(lat, lng) {
+  if (!buildingsLayer) return;
+  buildingsLayer.clearLayers();
+  excludedBuildings.clear();
+  const hint = document.getElementById('buildingHint');
+  if (hint) hint.style.display = 'none';
+
+  let added = 0;
+  let source = 'none';
+  try {
+    added = await loadBuildingsFromOverture(lat, lng);
+    if (added > 0) source = 'overture';
+  } catch (_err) {
+    /* swallow — fall through to Overpass */
+  }
+  if (added === 0) {
+    try {
+      added = await loadBuildingsFromOverpass(lat, lng);
+      if (added > 0) source = 'overpass';
+    } catch (_err) { /* silent */ }
+  }
+
+  if (hint) hint.style.display = added > 0 ? '' : 'none';
+  if (typeof plausible === 'function') {
+    try { plausible('buildings-loaded', { props: { source, count: added } }); } catch (_) {}
+  }
+}
+
+// Tap a building → mark it as "this is my house, subtract it from the lawn."
+// Tap again → un-exclude. Area is recomputed immediately so the sqft/price
+// updates live.
+function toggleBuildingExcluded(poly) {
+  if (excludedBuildings.has(poly)) {
+    excludedBuildings.delete(poly);
+    poly.setStyle(BUILDING_STYLE);
+  } else {
+    const sqMeters = turf.area(poly.toGeoJSON());
+    excludedBuildings.set(poly, sqMeters);
+    poly.setStyle(BUILDING_EXCLUDED_STYLE);
+  }
+  recalcArea();
+  if (typeof plausible === 'function') {
+    try { plausible('building-toggle', { props: { excluded: excludedBuildings.size } }); } catch (_) {}
+  }
 }
 
 /* ---------- Job option state ---------- */
@@ -2419,6 +2814,13 @@ function recalcArea() {
     const geojson = layer.toGeoJSON();
     totalSqMeters += turf.area(geojson);
   });
+  // Subtract any buildings the user has tapped as "that's my house".
+  // We subtract each excluded building's full footprint regardless of whether
+  // it sits inside the drawn polygon — in practice the polygon encloses the
+  // house 99% of the time and users expect tapping it to shrink the number.
+  let excludedSqMeters = 0;
+  for (const sqm of excludedBuildings.values()) excludedSqMeters += sqm;
+  totalSqMeters = Math.max(0, totalSqMeters - excludedSqMeters);
   const totalSqFt = totalSqMeters * 10.7639;
   lastDrawnSqFt = totalSqFt;
   const area = formatArea(totalSqFt, 'consumer');
@@ -3069,7 +3471,13 @@ async function applyGeoResult(lat, lng, stateName, zip, label, city) {
     err.classList.add('active');
     return;
   }
-  setTimeout(() => initMap(lat, lng), 50);
+  setTimeout(() => {
+    initMap(lat, lng);
+    // Fire-and-forget: pre-outline the user's house so they have a visual
+    // anchor for "draw around this". Failure is silent — the manual draw
+    // flow is fully functional without it.
+    loadBuildingsFor(lat, lng);
+  }, 50);
   setTimeout(() => {
     document.getElementById('mapSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 150);
@@ -3128,11 +3536,30 @@ document.getElementById('addressForm').addEventListener('submit', async (e) => {
   }
 });
 
+/* ---------- Draw toolbar wiring ----------
+   These buttons don't live on the map itself — they're standard DOM buttons
+   in the .map-toolbar, sized for thumbs (min-height 48px) and easier to hit
+   than anything Leaflet would paint on top of the tiles. */
+document.getElementById('drawStartBtn').addEventListener('click', () => {
+  if (typeof L === 'undefined' || !map) return;  // map not loaded yet
+  beginDrawing();
+});
+document.getElementById('drawDoneBtn').addEventListener('click', () => {
+  finishDrawing();
+});
+document.getElementById('drawUndoBtn').addEventListener('click', () => {
+  undoVertex();
+});
 document.getElementById('clearBtn').addEventListener('click', () => {
-  if (drawnItems) {
-    drawnItems.clearLayers();
-    recalcArea();
+  // Clear handles (a) discard in-progress draw, (b) remove completed polygons,
+  // (c) un-exclude any buildings the user had tapped as "my house".
+  if (drawState.mode === 'drawing') cancelDrawing();
+  if (drawnItems) drawnItems.clearLayers();
+  if (excludedBuildings.size) {
+    for (const poly of excludedBuildings.keys()) poly.setStyle(BUILDING_STYLE);
+    excludedBuildings.clear();
   }
+  recalcArea();
 });
 
 /* ---------- Compare-Your-Quote ----------
